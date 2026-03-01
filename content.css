@@ -1,0 +1,28 @@
+/* Blip content styles - injected into the host page */
+
+#blip-sidebar-frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  border: none;
+  z-index: 2147483647; /* max z-index */
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
+  transition: width 0.2s ease;
+}
+
+/* Page shift when sidebar is open */
+html.blip-sidebar-open {
+  margin-left: var(--blip-sidebar-width, 18vw) !important;
+  transition: margin-left 0.2s ease;
+}
+
+html.blip-sidebar-open body {
+  width: 100%;
+}
+
+/* Editing mode indicator - subtle border */
+html.blip-editing {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
