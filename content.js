@@ -21,6 +21,7 @@
   // Sidebar injection
   // -------------------------------------------------------
   let dragHandle = null;
+  let collapsedTab = null;
   let currentSidebarWidth = 0;
 
   function injectSidebar() {
@@ -39,71 +40,105 @@
     document.documentElement.appendChild(sidebarFrame);
 
     injectDragHandle(width);
+    injectCollapsedTab();
 
     window.addEventListener('message', handleSidebarMessage);
   }
 
-  function injectDragHandle(initialRight) {
+  function injectDragHandle(initialLeft) {
     if (dragHandle) return;
 
     dragHandle = document.createElement('div');
     dragHandle.id = 'blip-drag-handle';
-    dragHandle.style.cssText = [
-      'position:fixed', 'top:0', 'right:' + initialRight + 'px', 'width:6px', 'height:100vh',
-      'cursor:ew-resize', 'z-index:2147483647', 'background:transparent',
-      'transition:background 0.15s'
-    ].join(';');
-    dragHandle.addEventListener('mouseenter', () => { dragHandle.style.background = 'rgba(59,130,246,0.3)'; });
-    dragHandle.addEventListener('mouseleave', () => { dragHandle.style.background = 'transparent'; });
+    dragHandle.style.left = initialLeft + 'px';
     dragHandle.addEventListener('mousedown', startDrag);
-    dragHandle.addEventListener('click', onHandleClick);
     document.documentElement.appendChild(dragHandle);
-    updateHandleTitle();
   }
 
-  function updateHandleTitle() {
-    if (!dragHandle) return;
-    dragHandle.title = currentSidebarWidth <= 0 ? 'Open blip' : '';
-  }
+  function injectCollapsedTab() {
+    if (collapsedTab) return;
 
-  function onHandleClick() {
-    // If sidebar is collapsed, reopen it
-    if (currentSidebarWidth <= 0) {
-      const width = BLIP_CONFIG.sidebar.defaultWidthPx;
-      setSidebarWidth(width);
-    }
+    collapsedTab = document.createElement('div');
+    collapsedTab.id = 'blip-collapsed-tab';
+    collapsedTab.textContent = 'blip';
+    collapsedTab.addEventListener('click', expandSidebar);
+    document.documentElement.appendChild(collapsedTab);
   }
 
   function setSidebarWidth(w) {
-    currentSidebarWidth = w;
+    const clamped = Math.max(BLIP_CONFIG.sidebar.minWidthPx, Math.min(BLIP_CONFIG.sidebar.maxWidthPx, w));
+    currentSidebarWidth = clamped;
+
     if (sidebarFrame) {
-      sidebarFrame.style.width = w + 'px';
-      sidebarFrame.style.display = w <= 0 ? 'none' : '';
+      sidebarFrame.style.width = clamped + 'px';
     }
-    document.documentElement.style.setProperty('--blip-sidebar-width', w + 'px');
-    if (dragHandle) dragHandle.style.right = w + 'px';
-    if (w > 0) {
-      document.documentElement.classList.add('blip-sidebar-open');
-    } else {
-      document.documentElement.classList.remove('blip-sidebar-open');
+    document.documentElement.style.setProperty('--blip-sidebar-width', clamped + 'px');
+    if (dragHandle) dragHandle.style.left = clamped + 'px';
+  }
+
+  function collapseSidebar() {
+    currentSidebarWidth = 0;
+    if (sidebarFrame) {
+      sidebarFrame.style.display = 'none';
     }
-    updateHandleTitle();
+    document.documentElement.classList.remove('blip-sidebar-open');
+    document.documentElement.style.setProperty('--blip-sidebar-width', '0px');
+    if (dragHandle) {
+      dragHandle.style.left = '0px';
+      dragHandle.style.display = 'none';
+    }
+    if (collapsedTab) {
+      collapsedTab.style.display = 'block';
+    }
+  }
+
+  function expandSidebar() {
+    const width = BLIP_CONFIG.sidebar.defaultWidthPx;
+    currentSidebarWidth = width;
+    if (sidebarFrame) {
+      sidebarFrame.style.display = '';
+      sidebarFrame.style.width = width + 'px';
+    }
+    document.documentElement.classList.add('blip-sidebar-open');
+    document.documentElement.style.setProperty('--blip-sidebar-width', width + 'px');
+    if (dragHandle) {
+      dragHandle.style.left = width + 'px';
+      dragHandle.style.display = '';
+    }
+    if (collapsedTab) {
+      collapsedTab.style.display = 'none';
+    }
   }
 
   function startDrag(e) {
     e.preventDefault();
-    e.stopPropagation(); // prevent click handler from firing
-    let hasDragged = false;
+
+    // Remove transition during drag for instant feedback
+    if (sidebarFrame) sidebarFrame.style.transition = 'none';
+    if (dragHandle) dragHandle.style.transition = 'none';
+
     const onMove = (ev) => {
-      hasDragged = true;
-      const newWidth = Math.max(0, Math.min(500, window.innerWidth - ev.clientX));
-      setSidebarWidth(newWidth);
+      const x = ev.clientX;
+      // If dragged below a threshold, collapse
+      if (x < 60) {
+        collapseSidebar();
+        onUp();
+        return;
+      }
+      // Clamp between min and max
+      const w = Math.max(BLIP_CONFIG.sidebar.minWidthPx, Math.min(BLIP_CONFIG.sidebar.maxWidthPx, x));
+      currentSidebarWidth = w;
+      if (sidebarFrame) sidebarFrame.style.width = w + 'px';
+      document.documentElement.style.setProperty('--blip-sidebar-width', w + 'px');
+      if (dragHandle) dragHandle.style.left = w + 'px';
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.body.style.userSelect = '';
-      // If they barely dragged, don't trigger click
+      // Restore transitions
+      if (sidebarFrame) sidebarFrame.style.transition = '';
+      if (dragHandle) dragHandle.style.transition = '';
     };
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onMove);
@@ -115,7 +150,6 @@
       sidebarFrame.remove();
       sidebarFrame = null;
     }
-    // Drag handle persists — do NOT remove it
     document.documentElement.classList.remove('blip-sidebar-open');
     document.documentElement.style.removeProperty('--blip-sidebar-width');
     window.removeEventListener('message', handleSidebarMessage);
@@ -132,6 +166,11 @@
   function devLog(label, value, status = '', entryId = null) {
     if (!BLIP_CONFIG.dev.enabled) return;
     sendToSidebar('devLog', { label, value, status, entryId });
+  }
+
+  function devSeparator() {
+    if (!BLIP_CONFIG.dev.enabled) return;
+    sendToSidebar('devSeparator');
   }
 
   function handleSidebarMessage(event) {
@@ -153,7 +192,7 @@
         break;
       case 'closeSidebar':
         cancelEdits();
-        setSidebarWidth(0);
+        collapseSidebar();
         break;
     }
   }
@@ -161,8 +200,12 @@
   function sendInitialDevLogs() {
     devLog('Site', window.location.hostname, 'success');
     devLog('Repo', `${BLIP_CONFIG.github.owner}/${BLIP_CONFIG.github.repo}`, '');
-    devLog('File', BLIP_CONFIG.github.filePath, '');
     devLog('Branch', BLIP_CONFIG.github.branch, '');
+    devLog('File', BLIP_CONFIG.github.filePath, '');
+    devSeparator();
+    devLog('Source', 'not yet fetched (click Edit)', '', 'source-status');
+    devLog('File SHA', '-', '', 'file-sha');
+    devSeparator();
     devLog('Mode', 'designMode OFF', '', 'edit-mode');
     devLog('Observer', 'idle', '', 'observer-status');
   }
@@ -215,8 +258,6 @@
       const text = liveNode.textContent;
       if (!text || !text.trim()) continue;
 
-      // Find this text content in the source string
-      // Use surrounding context (parent tag) to disambiguate
       const offset = findTextInSource(text, liveNode, sourceString);
       if (offset !== -1) {
         textNodeMap.push({
@@ -238,7 +279,6 @@
       NodeFilter.SHOW_TEXT,
       {
         acceptNode: (node) => {
-          // Skip script, style, and blip's own elements
           const parent = node.parentElement;
           if (!parent) return NodeFilter.FILTER_REJECT;
           const tag = parent.tagName.toLowerCase();
@@ -248,7 +288,6 @@
           if (parent.closest('#blip-sidebar-frame')) {
             return NodeFilter.FILTER_REJECT;
           }
-          // Skip whitespace-only nodes
           if (!node.textContent.trim()) return NodeFilter.FILTER_REJECT;
           return NodeFilter.FILTER_ACCEPT;
         }
@@ -262,19 +301,13 @@
   }
 
   function findTextInSource(text, liveNode, sourceString) {
-    // Strategy: find the text in the source, using parent tag context to disambiguate.
-    // For duplicate text content, we use occurrence order.
-
     const trimmedText = text.trim();
     if (!trimmedText) return -1;
 
-    // Escape special regex chars
     const escaped = trimmedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Allow flexible whitespace matching between words
     const flexPattern = escaped.replace(/\s+/g, '\\s+');
     const regex = new RegExp(flexPattern, 'g');
 
-    // Collect all matches
     const matches = [];
     let match;
     while ((match = regex.exec(sourceString)) !== null) {
@@ -284,8 +317,7 @@
     if (matches.length === 0) return -1;
     if (matches.length === 1) return matches[0].offset;
 
-    // Multiple matches: disambiguate by occurrence order.
-    // Count how many previous siblings/text nodes with the same content appear before this one.
+    // Multiple matches: disambiguate by occurrence order
     const allLiveTextNodes = getTextNodes(document.body);
     let occurrenceIndex = 0;
     for (const node of allLiveTextNodes) {
@@ -299,7 +331,6 @@
       return matches[occurrenceIndex].offset;
     }
 
-    // Fallback to first match
     return matches[0].offset;
   }
 
@@ -315,18 +346,15 @@
 
         const target = mutation.target;
 
-        // Only track mutations on nodes the user has interacted with
         if (BLIP_CONFIG.observer.trackOnlyUserInitiated) {
           if (!userInteractedNodes.has(target) && !userInteractedNodes.has(target.parentElement)) {
             continue;
           }
         }
 
-        // Find this node in our map
         const mapping = textNodeMap.find(m => m.liveNode === target);
         if (!mapping) continue;
 
-        // Record the mutation (latest value wins for same node) — silently, no per-keystroke logs
         const existing = mutations.find(m => m.liveNode === target);
         if (existing) {
           existing.newText = target.textContent;
@@ -342,7 +370,6 @@
       }
     });
 
-    // Start observing after the settle delay
     setTimeout(() => {
       observer.observe(document.body, {
         characterData: true,
@@ -379,7 +406,6 @@
   function onUserInteract(e) {
     if (e.target && e.target !== sidebarFrame) {
       userInteractedNodes.add(e.target);
-      // Also add text node children
       if (e.target.childNodes) {
         for (const child of e.target.childNodes) {
           if (child.nodeType === Node.TEXT_NODE) {
@@ -420,8 +446,6 @@
     const range = selection.getRangeAt(0);
     range.deleteContents();
     range.insertNode(document.createTextNode(text));
-
-    // Collapse cursor to end of pasted text
     selection.collapseToEnd();
   }
 
@@ -430,22 +454,23 @@
   // -------------------------------------------------------
   async function startEditSession() {
     try {
-      devLog('Fetch', 'requesting...', '');
+      devSeparator();
+      devLog('Source', 'fetching from GitHub...', '', 'source-status');
 
       // Step 1: Fetch source from GitHub
       const result = await fetchFromGitHub();
       sourceContent = result.content;
       sourceSHA = result.sha;
 
-      devLog('SHA', result.sha.substring(0, 7), 'success');
-      devLog('File size', `${result.size} bytes`, 'success');
+      devLog('Source', `fetched, ${result.size} bytes`, 'success', 'source-status');
+      devLog('File SHA', result.sha.substring(0, 7) + ' (diffing against this)', 'success', 'file-sha');
 
       // Step 2: Parse source DOM
       const parser = new DOMParser();
       sourceDOM = parser.parseFromString(sourceContent, 'text/html');
 
       const nodeCount = sourceDOM.body.querySelectorAll('*').length;
-      devLog('Parse', `${nodeCount} elements`, 'success');
+      devLog('Parsed source', `${nodeCount} elements`, 'success');
 
       // Step 3: Build text node map
       buildTextNodeMap(document.body, sourceContent);
@@ -478,7 +503,7 @@
     if (!isEditing || !sourceContent) return;
 
     try {
-      // Flush any pending observer records
+      // Flush pending observer records
       if (observer) {
         const pending = observer.takeRecords();
         for (const mutation of pending) {
@@ -501,9 +526,9 @@
         }
       }
 
-      // Filter to only actual changes
       const actualChanges = mutations.filter(m => m.newText !== m.originalText);
 
+      devSeparator();
       devLog('Changes', `${actualChanges.length} edit${actualChanges.length !== 1 ? 's' : ''}`, 'success');
 
       if (actualChanges.length === 0) {
@@ -511,11 +536,10 @@
         return;
       }
 
-      // Log each changed node: selector + full new text
       for (const change of actualChanges) {
         const selector = getCssSelector(change.liveNode);
         devLog('Edited', selector, 'success');
-        devLog('→', change.newText, '');
+        devLog('\u2192', change.newText, '');
       }
 
       // Apply changes to source (reverse offset order to preserve positions)
@@ -528,29 +552,24 @@
         newContent = before + change.newText + after;
       }
 
-      devLog('Commit', 'pushing...', '', 'commit-status');
+      devLog('Commit', 'pushing to GitHub...', '', 'commit-status');
 
-      // Commit to GitHub
       const result = await commitToGitHub(newContent, sourceSHA);
 
-      // Update local SHA for subsequent edits
       sourceSHA = result.sha;
       sourceContent = newContent;
 
-      devLog('Commit', result.commitSha.substring(0, 7), 'success', 'commit-status');
-      devLog('File SHA', result.sha.substring(0, 7), 'success');
+      devLog('Commit', result.commitSha.substring(0, 7) + ' (view on GitHub)', 'success', 'commit-status');
+      devLog('File SHA', result.sha.substring(0, 7) + ' (new base for next edit)', 'success', 'file-sha');
 
-      // Rebuild the map with new content (silently — no duplicate "Mapped nodes" entry)
       buildTextNodeMap(document.body, sourceContent, true);
 
-      // Exit edit mode
       exitEditMode();
       sendToSidebar('saved');
 
     } catch (err) {
       devLog('Error', err.message, 'error');
       sendToSidebar('error', { message: `Save failed: ${err.message}` });
-      // Don't exit edit mode on error - user's changes are still in the DOM
     }
   }
 
@@ -560,7 +579,6 @@
   function cancelEdits() {
     if (!isEditing) return;
 
-    // Restore original text content from our map
     for (const mapping of textNodeMap) {
       if (mapping.liveNode && mapping.liveNode.textContent !== mapping.originalText) {
         mapping.liveNode.textContent = mapping.originalText;
@@ -572,10 +590,9 @@
   }
 
   // -------------------------------------------------------
-  // Exit edit mode (shared cleanup)
+  // Utilities
   // -------------------------------------------------------
   function getCssSelector(node) {
-    // Build a CSS-selector-like path for a text node's parent element
     const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     if (!el) return '?';
     const parts = [];
@@ -585,7 +602,7 @@
       if (current.id) {
         segment += '#' + current.id;
         parts.unshift(segment);
-        break; // ID is unique enough
+        break;
       }
       const siblings = current.parentElement
         ? Array.from(current.parentElement.children).filter(c => c.tagName === current.tagName)
@@ -600,6 +617,9 @@
     return parts.join(' > ');
   }
 
+  // -------------------------------------------------------
+  // Exit edit mode (shared cleanup)
+  // -------------------------------------------------------
   function exitEditMode() {
     document.designMode = 'off';
     document.documentElement.classList.remove('blip-editing');
@@ -615,14 +635,12 @@
   // Initialize
   // -------------------------------------------------------
   function init() {
-    // Only inject on matching sites
     const currentHost = window.location.hostname.replace('www.', '');
     if (!currentHost.includes(BLIP_CONFIG.site.url)) return;
 
     injectSidebar();
   }
 
-  // Wait for DOM to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

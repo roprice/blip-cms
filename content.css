@@ -6,26 +6,60 @@
   left: 0;
   height: 100vh;
   border: none;
-  z-index: 2147483647; /* max z-index */
+  z-index: 2147483646;
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
   transition: width 0.2s ease;
 }
 
-/* Page shift and narrow when sidebar is open */
-html.blip-sidebar-open {
-  margin-left: var(--blip-sidebar-width, 300px) !important;
-  width: calc(100% - var(--blip-sidebar-width, 300px)) !important;
-  transition: margin-left 0.2s ease, width 0.2s ease;
-  overflow-x: hidden;
-}
-
+/* Page shift when sidebar is open - applied to body so fixed sidebar stays at left:0 */
 html.blip-sidebar-open body {
-  /* Ensure body stays within the narrowed html container */
-  max-width: 100%;
+  margin-left: var(--blip-sidebar-width, 300px) !important;
+  transition: margin-left 0.2s ease;
+  width: calc(100% - var(--blip-sidebar-width, 300px));
 }
 
 /* Editing mode indicator - subtle border */
 html.blip-editing {
   outline: 2px solid #3b82f6;
   outline-offset: -2px;
+}
+
+/* Drag handle - sits at the right edge of the sidebar */
+#blip-drag-handle {
+  position: fixed;
+  top: 0;
+  width: 6px;
+  height: 100vh;
+  cursor: ew-resize;
+  z-index: 2147483647;
+  background: transparent;
+  transition: background 0.15s, left 0.2s ease;
+}
+
+#blip-drag-handle:hover {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+/* Collapsed tab - visible when sidebar is hidden */
+#blip-collapsed-tab {
+  position: fixed;
+  top: 12px;
+  left: 0;
+  z-index: 2147483647;
+  background: #3b82f6;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 6px 8px 6px 6px;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+  display: none;
+}
+
+#blip-collapsed-tab:hover {
+  opacity: 1;
 }
