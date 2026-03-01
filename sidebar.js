@@ -108,3 +108,6 @@ window.addEventListener('message', (event) => {
             break;
     }
 });
+
+// Tell the content script we're ready to receive messages
+sendToContent('ready');

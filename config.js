@@ -18,9 +18,7 @@ const BLIP_CONFIG = {
 
   // Sidebar settings
   sidebar: {
-    widthPercent: 18,
-    minWidthPx: 220,
-    maxWidthPx: 360
+    defaultWidthPx: 300
   },
 
   // Dev mode

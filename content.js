@@ -20,16 +20,14 @@
   // -------------------------------------------------------
   // Sidebar injection
   // -------------------------------------------------------
+  let dragHandle = null;
+  let currentSidebarWidth = 0;
+
   function injectSidebar() {
     if (document.getElementById('blip-sidebar-frame')) return;
 
-    const width = Math.max(
-      BLIP_CONFIG.sidebar.minWidthPx,
-      Math.min(
-        window.innerWidth * (BLIP_CONFIG.sidebar.widthPercent / 100),
-        BLIP_CONFIG.sidebar.maxWidthPx
-      )
-    );
+    const width = BLIP_CONFIG.sidebar.defaultWidthPx;
+    currentSidebarWidth = width;
 
     sidebarFrame = document.createElement('iframe');
     sidebarFrame.id = 'blip-sidebar-frame';
@@ -40,7 +38,76 @@
     document.documentElement.classList.add('blip-sidebar-open');
     document.documentElement.appendChild(sidebarFrame);
 
+    injectDragHandle(width);
+
     window.addEventListener('message', handleSidebarMessage);
+  }
+
+  function injectDragHandle(initialRight) {
+    if (dragHandle) return;
+
+    dragHandle = document.createElement('div');
+    dragHandle.id = 'blip-drag-handle';
+    dragHandle.style.cssText = [
+      'position:fixed', 'top:0', 'right:' + initialRight + 'px', 'width:6px', 'height:100vh',
+      'cursor:ew-resize', 'z-index:2147483647', 'background:transparent',
+      'transition:background 0.15s'
+    ].join(';');
+    dragHandle.addEventListener('mouseenter', () => { dragHandle.style.background = 'rgba(59,130,246,0.3)'; });
+    dragHandle.addEventListener('mouseleave', () => { dragHandle.style.background = 'transparent'; });
+    dragHandle.addEventListener('mousedown', startDrag);
+    dragHandle.addEventListener('click', onHandleClick);
+    document.documentElement.appendChild(dragHandle);
+    updateHandleTitle();
+  }
+
+  function updateHandleTitle() {
+    if (!dragHandle) return;
+    dragHandle.title = currentSidebarWidth <= 0 ? 'Open blip' : '';
+  }
+
+  function onHandleClick() {
+    // If sidebar is collapsed, reopen it
+    if (currentSidebarWidth <= 0) {
+      const width = BLIP_CONFIG.sidebar.defaultWidthPx;
+      setSidebarWidth(width);
+    }
+  }
+
+  function setSidebarWidth(w) {
+    currentSidebarWidth = w;
+    if (sidebarFrame) {
+      sidebarFrame.style.width = w + 'px';
+      sidebarFrame.style.display = w <= 0 ? 'none' : '';
+    }
+    document.documentElement.style.setProperty('--blip-sidebar-width', w + 'px');
+    if (dragHandle) dragHandle.style.right = w + 'px';
+    if (w > 0) {
+      document.documentElement.classList.add('blip-sidebar-open');
+    } else {
+      document.documentElement.classList.remove('blip-sidebar-open');
+    }
+    updateHandleTitle();
+  }
+
+  function startDrag(e) {
+    e.preventDefault();
+    e.stopPropagation(); // prevent click handler from firing
+    let hasDragged = false;
+    const onMove = (ev) => {
+      hasDragged = true;
+      const newWidth = Math.max(0, Math.min(500, window.innerWidth - ev.clientX));
+      setSidebarWidth(newWidth);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      // If they barely dragged, don't trigger click
+    };
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }
 
   function removeSidebar() {
@@ -48,6 +115,7 @@
       sidebarFrame.remove();
       sidebarFrame = null;
     }
+    // Drag handle persists — do NOT remove it
     document.documentElement.classList.remove('blip-sidebar-open');
     document.documentElement.style.removeProperty('--blip-sidebar-width');
     window.removeEventListener('message', handleSidebarMessage);
@@ -71,6 +139,9 @@
     if (msg.source !== 'blip-sidebar') return;
 
     switch (msg.action) {
+      case 'ready':
+        sendInitialDevLogs();
+        break;
       case 'startEdit':
         startEditSession();
         break;
@@ -82,9 +153,18 @@
         break;
       case 'closeSidebar':
         cancelEdits();
-        removeSidebar();
+        setSidebarWidth(0);
         break;
     }
+  }
+
+  function sendInitialDevLogs() {
+    devLog('Site', window.location.hostname, 'success');
+    devLog('Repo', `${BLIP_CONFIG.github.owner}/${BLIP_CONFIG.github.repo}`, '');
+    devLog('File', BLIP_CONFIG.github.filePath, '');
+    devLog('Branch', BLIP_CONFIG.github.branch, '');
+    devLog('Mode', 'designMode OFF', '', 'edit-mode');
+    devLog('Observer', 'idle', '', 'observer-status');
   }
 
   // -------------------------------------------------------
@@ -246,15 +326,10 @@
         const mapping = textNodeMap.find(m => m.liveNode === target);
         if (!mapping) continue;
 
-        // Record the mutation (latest value wins for same node)
+        // Record the mutation (latest value wins for same node) — silently, no per-keystroke logs
         const existing = mutations.find(m => m.liveNode === target);
-        const parentTag = target.parentElement ? target.parentElement.tagName.toLowerCase() : '?';
-        const preview = target.textContent.length > 30
-          ? target.textContent.substring(0, 30) + '…'
-          : target.textContent;
         if (existing) {
           existing.newText = target.textContent;
-          devLog('Mutation', `<${parentTag}> "${preview}"`, '');
         } else {
           mutations.push({
             liveNode: target,
@@ -263,7 +338,6 @@
             sourceOffset: mapping.sourceOffset,
             sourceLength: mapping.sourceLength
           });
-          devLog('Mutation', `<${parentTag}> "${preview}"`, 'success');
         }
       }
     });
@@ -437,13 +511,11 @@
         return;
       }
 
-      // Log each changed node as a CSS selector
+      // Log each changed node: selector + full new text
       for (const change of actualChanges) {
         const selector = getCssSelector(change.liveNode);
-        const preview = change.newText.length > 25
-          ? change.newText.substring(0, 25) + '…'
-          : change.newText;
-        devLog('Edited', `${selector}`, 'success');
+        devLog('Edited', selector, 'success');
+        devLog('→', change.newText, '');
       }
 
       // Apply changes to source (reverse offset order to preserve positions)

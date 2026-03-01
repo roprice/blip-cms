@@ -72,7 +72,7 @@ React, Next.js, Vue, Svelte, and similar component-based frameworks are explicit
 
 ### Sidebar
 
-The sidebar is a custom-injected iframe on the left side of the browser window. It is sized as a percentage of the browser window width.
+The sidebar is a custom-injected iframe on the left side of the browser window. It is sized at a fixed default width (configurable in `config.js`) and can be drag-resized by the user via a handle on its left edge.
 
 **Why a custom iframe instead of Chrome's native Side Panel:**
 
@@ -179,12 +179,29 @@ If the GitHub commit fails (network error, auth expiry, merge conflict, SHA mism
 
 ### Dev notifications (alpha only)
 
-During the alpha version, the sidebar displays diagnostic information for development and debugging purposes:
+During the alpha version, the sidebar displays diagnostic information in a collapsible dev panel at the bottom of the sidebar (occupying 50% of sidebar height by default, with a chevron toggle to collapse/expand).
 
-- On source fetch: SHA, file size, and fetch status
-- On DOM parse: parse status and node count
-- On save: new SHA returned from GitHub, confirming the round-trip
-- On error: full error details from the GitHub API response
+**Displayed on source fetch:** SHA, file size, and fetch status.
+
+**Displayed on DOM parse:** element count and mapped text node count.
+
+**In-place updates:** Dev log entries tagged with an `entryId` (Mode, Observer, Commit) update themselves in place rather than appending new lines. This prevents stale entries:
+
+- **Mode** updates from "designMode ON" to "designMode OFF" when editing ends.
+- **Observer** updates from "active" to "stopped" when the observer disconnects.
+- **Commit** updates from "pushing..." to the actual commit SHA on success.
+
+**Silent mutation recording:** The MutationObserver records mutations silently during editing — no per-keystroke log entries. Mutations are only surfaced at save time.
+
+**On save, displayed per edited node:**
+
+- `Edited:` followed by a CSS-selector-like path to the edited element (e.g., `section#hero > h1`, `div > p:nth-of-type(2)`). The selector walks up the DOM, anchoring at an `id` if found, adding `:nth-of-type(n)` disambiguation for sibling elements of the same tag.
+- `→:` followed by the full new text content of the node (text wraps within the panel, never clipped).
+
+**SHA labels:**
+
+- **Commit:** displays the git commit SHA (the one visible in GitHub's commit history).
+- **File SHA:** displays the blob SHA returned by the Contents API (used internally for the next PUT request). These are different objects — the commit SHA is what appears on the repo's commits page.
 
 These notifications are behind a dev-mode flag so they can be easily removed or hidden in the production version.
 
@@ -192,7 +209,9 @@ These notifications are behind a dev-mode flag so they can be easily removed or 
 
 ### Sidebar layout
 
-The sidebar occupies a percentage width of the browser window (suggested: 15-20% for the alpha, adjustable later). It is injected as an iframe on the left side of the viewport. When open, the page content shifts to the right to accommodate it.
+The sidebar has a fixed default width (set via `sidebar.defaultWidthPx` in `config.js`, default: 300px). It is injected as an iframe on the left side of the viewport. When open, the page content shifts to the right to accommodate it.
+
+**Drag to resize:** A 6px-wide invisible handle is positioned at the left edge of the sidebar iframe. On hover it highlights (blue accent). The user can drag it to resize the sidebar between 180px and 600px. The resize updates the iframe width and the `--blip-sidebar-width` CSS custom property live.
 
 **Default state** (top to bottom):
 
@@ -221,6 +240,8 @@ The sidebar occupies a percentage width of the browser window (suggested: 15-20%
 - The edit button is the dominant element in default state. Everything else is secondary.
 - In editing state, save and cancel are equally accessible. Neither should require scrolling.
 - Dev notifications should be visually distinct from user-facing UI (muted color, smaller font, monospace) so they are clearly diagnostic.
+- The dev panel occupies the bottom ~50% of the sidebar height and is independently scrollable.
+- The dev panel has a collapse/expand toggle (chevron) in its header. When collapsed, only the "DEV" label and chevron are visible.
 - The sidebar should have its own scroll if content overflows, independent of the page scroll.
 
 ## Account and configuration
