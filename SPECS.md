@@ -72,7 +72,7 @@ React, Next.js, Vue, Svelte, and similar component-based frameworks are explicit
 
 ### Sidebar
 
-The sidebar is a custom-injected iframe on the left side of the browser window. It is sized at a fixed default width (configurable in `config.js`) and can be drag-resized by the user via a handle on its left edge.
+The sidebar is a custom-injected iframe on the left side of the browser window. It is sized as a percentage of the browser window width.
 
 **Why a custom iframe instead of Chrome's native Side Panel:**
 
@@ -114,39 +114,76 @@ The sidebar is a custom-injected iframe on the left side of the browser window. 
 17. User sees "Saved" confirmation in the sidebar.
 18. UI returns to default state.
 
-### Diff strategy: MutationObserver + parallel tree mapping
+### Diff strategy: dual-track mapping
 
 This is the core technical mechanism of Blip. The guiding principle is: **never serialize and replace the entire file from the DOM.**
 
 The browser's DOM serializer does not preserve the original file's formatting. Frameworks like Alpine and HTMX mutate the DOM at runtime. Saving raw `outerHTML` would introduce formatting noise into every commit and could bake in runtime-generated attributes and state.
 
-**How it works:**
+#### Design principle: deterministic first, LLM as safety net
+
+Blip's architecture prioritizes speed and predictability. Every edit should be processed deterministically using JavaScript wherever possible. An LLM call (currently Groq/Llama 3.3 70B) exists as a safety net for structural corruption that the deterministic path cannot repair. The LLM is never in the critical path for normal edits. This principle ensures sub-second save times for the vast majority of edits, with a ~100-200ms LLM fallback only when structural validation detects corruption.
+
+If future testing reveals scenarios where the LLM consistently produces better results, the architecture supports expanding its role. The principle is not "avoid LLMs" but rather "don't add latency when you don't need to."
+
+#### Track 1: simple text node mapping (fast path)
+
+For elements that contain only text (no child elements as siblings to text nodes), Blip uses precise character-offset mapping:
 
 1. Fetch the raw source file from GitHub before editing begins.
 2. Parse it with `DOMParser` to get a clean source DOM.
-3. Walk the live DOM and parsed source DOM in parallel, building a map: each live text node to its character offset in the raw source string.
-4. Attach a `MutationObserver` watching for `characterData` mutations only.
-5. When the user clicks save, the observer has recorded exactly which text nodes changed and what they changed to.
-6. Apply targeted string replacements at the mapped character offsets in the raw source string. Not re-serializing anything. Surgical find-and-replace at known positions.
-7. Commit the minimally modified file.
+3. Walk the live DOM, finding text nodes whose parent contains only text (no element children).
+4. Map each text node to its character offset in the raw source string using regex matching with whitespace flexibility.
+5. Attach a `MutationObserver` watching for `characterData` mutations.
+6. On save, apply targeted string replacements at the mapped character offsets. Surgical find-and-replace at known positions.
 
-This ensures clean git diffs that show exactly what the user changed and nothing else.
+This produces clean git diffs that show exactly what the user changed and nothing else.
+
+#### Track 2: parent-level innerHTML mapping (mixed-content path)
+
+For elements that contain both text nodes AND element children (e.g., `<h1>Text <span>styled</span> more text</h1>`), individual text node tracking is unreliable because `designMode` can restructure, merge, split, or destroy text nodes during editing.
+
+Instead, Blip maps at the parent element level:
+
+1. During the tree walk, detect "mixed-content parents" - elements that have at least one text node child and at least one element child (inline or block).
+2. Store the parent's complete innerHTML and its character offset/length in the source string.
+3. Individual text nodes inside these parents are still tracked by the observer (to detect that a change occurred), but they are flagged as `parentMapped`.
+4. On save, compare the parent's current innerHTML against the stored source innerHTML. If different, replace the entire innerHTML region in the source string.
+5. The `MutationObserver` also watches `childList` mutations (node creation/deletion) to catch structural changes like the user pressing Cmd+B to bold text, hitting Enter to create line breaks, or accidentally deleting across inline element boundaries.
+
+This approach handles all the inline element edge cases: editing text before/after/across `<span>`, `<strong>`, `<em>`, `<a>`, and other inline elements. It also handles the user creating new inline elements via keyboard shortcuts.
+
+#### LLM safety net (Groq)
+
+After applying all replacements (both tracks), if any parent-level changes were made, Blip runs a quick structural validation:
+
+- Regex patterns check for common corruption (e.g., `text/p>`, mismatched close tags).
+- If corruption is detected and the LLM is enabled in config, Blip sends the original and corrupted fragments to Groq (Llama 3.3 70B via background service worker) with instructions to fix syntax only and preserve all content changes.
+- The LLM call routes through `background.js` (required for Manifest V3 CORS).
+- The dev panel indicates whether LLM repair was used and shows token counts.
+
+The LLM config is disabled by default. To enable: set `llm.enabled: true` and provide a Groq API key in `config.js`.
 
 **Why this approach over alternatives:**
 
 - **XPath:** Can break if frameworks inject wrapper elements at runtime. An XPath that was valid against the source may not match the live DOM, or vice versa.
 - **Unified diff:** Operates on lines, not semantic content. Gets confused by duplicate content (e.g., two `<p>` tags with similar text). Line-level diffing can also be thrown off by whitespace differences between source and rendered DOM.
 - **Full DOM serialization:** Destroys formatting and captures framework runtime state. Ruled out entirely.
+- **Text-node-only mapping (original approach):** Works for simple text edits but fails when `designMode` restructures nodes around inline elements. The dual-track approach retains the speed of text-node mapping for simple cases while handling complex cases at the parent level.
 
-### MutationObserver: known risks and mitigations
+### MutationObserver: configuration and known risks
 
-The MutationObserver is a critical piece of Blip's architecture. The following risks must be anticipated and handled in code:
+The MutationObserver watches for both `characterData` (text changes) and `childList` (structural changes) mutations. It is configured with `subtree: true` to capture changes anywhere in the document body.
 
-1. **Framework-initiated mutations.** Alpine, HTMX, and other frameworks react to user interactions. Clicking into a text node could trigger a binding that changes other text on the page. These would be captured as "user edits" when they are not.
-   - *Mitigation:* Only track mutations inside elements the user has actually clicked, focused on, or typed into. Filter by whether the mutation was preceded by an input-related event.
+**User interaction filtering:** Removed. During `designMode`, all characterData mutations are user-initiated. The previous approach of filtering by tracked user interactions caused false negatives (T1.3.A: "no changes detected" on valid edits). The `settleDelayMs` (150ms) after enabling designMode is sufficient to filter out browser normalization mutations.
 
-2. **Browser normalization on designMode activation.** When `designMode` is enabled, the browser may normalize the DOM: collapsing whitespace, wrapping bare text nodes in `<span>` or `<div>` elements. These register as mutations even though the user did nothing.
-   - *Mitigation:* Ignore mutations that fire in the first ~100ms after enabling designMode. Begin observing only after the DOM has settled.
+**Known risks and mitigations:**
+
+1. **Framework-initiated mutations.** Alpine, HTMX, and other frameworks react to user interactions. Clicking into a text node could trigger a binding that changes other text on the page.
+   - *Mitigation:* The 150ms settle delay filters initial framework reactions. For ongoing framework mutations, the parent-level innerHTML comparison naturally captures only the net change (including framework mutations, which are minimal for text-only edits). Future: scope observation to content areas, excluding known dynamic containers.
+
+2. **Browser normalization on designMode activation.** When `designMode` is enabled, the browser may normalize the DOM: collapsing whitespace, wrapping bare text nodes in elements.
+   - *Mitigation:* Observer starts after a configurable delay (`settleDelayMs`, default 150ms). Mutations during this window are not captured.
 
 3. **Copy-paste injecting structural HTML.** When a user pastes formatted text, the browser may insert elements with inline styles rather than plain text. This is a structural mutation, not a `characterData` mutation.
    - *Mitigation:* Intercept paste events and force plain-text paste (`e.preventDefault()` + `document.execCommand('insertText', false, plainText)` or equivalent).
@@ -179,29 +216,12 @@ If the GitHub commit fails (network error, auth expiry, merge conflict, SHA mism
 
 ### Dev notifications (alpha only)
 
-During the alpha version, the sidebar displays diagnostic information in a collapsible dev panel at the bottom of the sidebar (occupying 50% of sidebar height by default, with a chevron toggle to collapse/expand).
+During the alpha version, the sidebar displays diagnostic information for development and debugging purposes:
 
-**Displayed on source fetch:** SHA, file size, and fetch status.
-
-**Displayed on DOM parse:** element count and mapped text node count.
-
-**In-place updates:** Dev log entries tagged with an `entryId` (Mode, Observer, Commit) update themselves in place rather than appending new lines. This prevents stale entries:
-
-- **Mode** updates from "designMode ON" to "designMode OFF" when editing ends.
-- **Observer** updates from "active" to "stopped" when the observer disconnects.
-- **Commit** updates from "pushing..." to the actual commit SHA on success.
-
-**Silent mutation recording:** The MutationObserver records mutations silently during editing — no per-keystroke log entries. Mutations are only surfaced at save time.
-
-**On save, displayed per edited node:**
-
-- `Edited:` followed by a CSS-selector-like path to the edited element (e.g., `section#hero > h1`, `div > p:nth-of-type(2)`). The selector walks up the DOM, anchoring at an `id` if found, adding `:nth-of-type(n)` disambiguation for sibling elements of the same tag.
-- `→:` followed by the full new text content of the node (text wraps within the panel, never clipped).
-
-**SHA labels:**
-
-- **Commit:** displays the git commit SHA (the one visible in GitHub's commit history).
-- **File SHA:** displays the blob SHA returned by the Contents API (used internally for the next PUT request). These are different objects — the commit SHA is what appears on the repo's commits page.
+- On source fetch: SHA, file size, and fetch status
+- On DOM parse: parse status and node count
+- On save: new SHA returned from GitHub, confirming the round-trip
+- On error: full error details from the GitHub API response
 
 These notifications are behind a dev-mode flag so they can be easily removed or hidden in the production version.
 
@@ -209,9 +229,7 @@ These notifications are behind a dev-mode flag so they can be easily removed or 
 
 ### Sidebar layout
 
-The sidebar has a fixed default width (set via `sidebar.defaultWidthPx` in `config.js`, default: 300px). It is injected as an iframe on the left side of the viewport. When open, the page content shifts to the right to accommodate it.
-
-**Drag to resize:** A 6px-wide invisible handle is positioned at the left edge of the sidebar iframe. On hover it highlights (blue accent). The user can drag it to resize the sidebar between 180px and 600px. The resize updates the iframe width and the `--blip-sidebar-width` CSS custom property live.
+The sidebar occupies a percentage width of the browser window (suggested: 15-20% for the alpha, adjustable later). It is injected as an iframe on the left side of the viewport. When open, the page content shifts to the right to accommodate it.
 
 **Default state** (top to bottom):
 
@@ -240,8 +258,6 @@ The sidebar has a fixed default width (set via `sidebar.defaultWidthPx` in `conf
 - The edit button is the dominant element in default state. Everything else is secondary.
 - In editing state, save and cancel are equally accessible. Neither should require scrolling.
 - Dev notifications should be visually distinct from user-facing UI (muted color, smaller font, monospace) so they are clearly diagnostic.
-- The dev panel occupies the bottom ~50% of the sidebar height and is independently scrollable.
-- The dev panel has a collapse/expand toggle (chevron) in its header. When collapsed, only the "DEV" label and chevron are visible.
 - The sidebar should have its own scroll if content overflows, independent of the page scroll.
 
 ## Account and configuration

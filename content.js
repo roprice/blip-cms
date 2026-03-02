@@ -12,10 +12,11 @@
   let sourceContent = null;   // raw file string from GitHub
   let sourceSHA = null;
   let sourceDOM = null;       // DOMParser result of the source
-  let textNodeMap = [];       // { liveNode, sourceOffset, sourceLength }
+  let textNodeMap = [];       // { liveNode, sourceOffset, sourceLength, parentMapped }
+  let parentMap = [];         // { liveParent, sourceInnerHTML, sourceOffset, sourceLength }
   let observer = null;        // MutationObserver
   let mutations = [];         // recorded characterData mutations
-  let userInteractedNodes = new Set(); // nodes the user clicked/focused
+  let mutatedParents = new Set(); // parents that had structural (childList) mutations
 
   // -------------------------------------------------------
   // Sidebar injection
@@ -113,19 +114,16 @@
   function startDrag(e) {
     e.preventDefault();
 
-    // Remove transition during drag for instant feedback
     if (sidebarFrame) sidebarFrame.style.transition = 'none';
     if (dragHandle) dragHandle.style.transition = 'none';
 
     const onMove = (ev) => {
       const x = ev.clientX;
-      // If dragged below a threshold, collapse
       if (x < 60) {
         collapseSidebar();
         onUp();
         return;
       }
-      // Clamp between min and max
       const w = Math.max(BLIP_CONFIG.sidebar.minWidthPx, Math.min(BLIP_CONFIG.sidebar.maxWidthPx, x));
       currentSidebarWidth = w;
       if (sidebarFrame) sidebarFrame.style.width = w + 'px';
@@ -136,7 +134,6 @@
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.body.style.userSelect = '';
-      // Restore transitions
       if (sidebarFrame) sidebarFrame.style.transition = '';
       if (dragHandle) dragHandle.style.transition = '';
     };
@@ -248,28 +245,216 @@
   }
 
   // -------------------------------------------------------
-  // Text node mapping
+  // Inline element detection
+  // -------------------------------------------------------
+  const INLINE_TAGS = new Set([
+    'a', 'abbr', 'b', 'bdo', 'br', 'cite', 'code', 'dfn', 'em', 'i',
+    'kbd', 'mark', 'q', 'rp', 'rt', 'ruby', 's', 'samp', 'small',
+    'span', 'strong', 'sub', 'sup', 'time', 'u', 'var', 'wbr'
+  ]);
+
+  function isMixedContentParent(el) {
+    // A mixed-content parent has at least one text node child AND at least one element child.
+    // This covers inline elements (span, strong, a, etc.) AND block elements (div, p, etc.)
+    // because designMode can restructure any sibling relationship during editing.
+    let hasTextChild = false;
+    let hasElementChild = false;
+    for (const child of el.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE && child.textContent.trim()) {
+        hasTextChild = true;
+      }
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        hasElementChild = true;
+      }
+      if (hasTextChild && hasElementChild) return true;
+    }
+    return false;
+  }
+
+  // -------------------------------------------------------
+  // Text node mapping (dual-track: simple text nodes + mixed-content parents)
   // -------------------------------------------------------
   function buildTextNodeMap(liveRoot, sourceString, silent = false) {
     textNodeMap = [];
+    parentMap = [];
+    const processedParents = new Set();
     const liveTextNodes = getTextNodes(liveRoot);
 
     for (const liveNode of liveTextNodes) {
       const text = liveNode.textContent;
       if (!text || !text.trim()) continue;
 
+      const parentEl = liveNode.parentElement;
+
+      // Check if this text node lives inside a mixed-content parent
+      if (parentEl && isMixedContentParent(parentEl) && !processedParents.has(parentEl)) {
+        processedParents.add(parentEl);
+
+        const parentMapping = findParentInSource(parentEl, sourceString);
+        if (parentMapping) {
+          parentMap.push({
+            liveParent: parentEl,
+            sourceInnerHTML: parentMapping.innerHTML,
+            sourceOffset: parentMapping.offset,
+            sourceLength: parentMapping.length,
+            originalInnerHTML: parentMapping.innerHTML
+          });
+        }
+
+        // Still map individual text nodes so the observer can detect changes
+        mapTextNodesInParent(parentEl, sourceString);
+        continue;
+      }
+
+      // Skip if already handled as part of a mixed-content parent
+      if (parentEl && processedParents.has(parentEl)) continue;
+
+      // Simple text node: direct offset mapping
       const offset = findTextInSource(text, liveNode, sourceString);
       if (offset !== -1) {
         textNodeMap.push({
           liveNode,
           sourceOffset: offset,
           sourceLength: text.length,
-          originalText: text
+          originalText: text,
+          parentMapped: false
         });
       }
     }
 
-    if (!silent) devLog('Mapped nodes', `${textNodeMap.length} text nodes`, 'success');
+    if (!silent) {
+      devLog('Mapped nodes', `${textNodeMap.length} text nodes`, 'success');
+      if (parentMap.length > 0) {
+        devLog('Mixed parents', `${parentMap.length} parent-level maps`, 'success');
+      }
+    }
+  }
+
+  function mapTextNodesInParent(parentEl, sourceString) {
+    for (const child of parentEl.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE && child.textContent.trim()) {
+        const offset = findTextInSource(child.textContent, child, sourceString);
+        if (offset !== -1) {
+          textNodeMap.push({
+            liveNode: child,
+            sourceOffset: offset,
+            sourceLength: child.textContent.length,
+            originalText: child.textContent,
+            parentMapped: true
+          });
+        }
+      }
+      if (child.nodeType === Node.ELEMENT_NODE && INLINE_TAGS.has(child.tagName.toLowerCase())) {
+        for (const grandchild of child.childNodes) {
+          if (grandchild.nodeType === Node.TEXT_NODE && grandchild.textContent.trim()) {
+            const offset = findTextInSource(grandchild.textContent, grandchild, sourceString);
+            if (offset !== -1) {
+              textNodeMap.push({
+                liveNode: grandchild,
+                sourceOffset: offset,
+                sourceLength: grandchild.textContent.length,
+                originalText: grandchild.textContent,
+                parentMapped: true
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function findParentInSource(liveParent, sourceString) {
+    const tag = liveParent.tagName.toLowerCase();
+    const innerHTML = liveParent.innerHTML;
+
+    // Find all instances of this tag in source
+    const tagRegex = new RegExp(`<${tag}[^>]*>`, 'gi');
+    let match;
+    const candidates = [];
+    while ((match = tagRegex.exec(sourceString)) !== null) {
+      candidates.push({ offset: match.index, tagLength: match[0].length });
+    }
+
+    if (candidates.length === 0) return null;
+
+    // For each candidate, extract innerHTML and compare
+    for (const candidate of candidates) {
+      const afterOpenTag = candidate.offset + candidate.tagLength;
+      const closeIdx = findMatchingCloseTag(sourceString, afterOpenTag, tag);
+      if (closeIdx === -1) continue;
+
+      const candidateInnerHTML = sourceString.substring(afterOpenTag, closeIdx);
+      const candidateText = candidateInnerHTML.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      const innerText = innerHTML.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+      if (candidateText === innerText) {
+        return {
+          innerHTML: candidateInnerHTML,
+          offset: afterOpenTag,
+          length: candidateInnerHTML.length
+        };
+      }
+    }
+
+    // Fallback: best text similarity match
+    let bestMatch = null;
+    let bestScore = -1;
+    for (const candidate of candidates) {
+      const afterOpenTag = candidate.offset + candidate.tagLength;
+      const closeIdx = findMatchingCloseTag(sourceString, afterOpenTag, tag);
+      if (closeIdx === -1) continue;
+
+      const candidateInnerHTML = sourceString.substring(afterOpenTag, closeIdx);
+      const candidateText = candidateInnerHTML.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      const innerText = innerHTML.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+      const cWords = new Set(candidateText.split(/\s+/));
+      const iWords = new Set(innerText.split(/\s+/));
+      const intersection = [...cWords].filter(w => iWords.has(w)).length;
+      const union = new Set([...cWords, ...iWords]).size;
+      const score = union > 0 ? intersection / union : 0;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = {
+          innerHTML: candidateInnerHTML,
+          offset: afterOpenTag,
+          length: candidateInnerHTML.length
+        };
+      }
+    }
+
+    return bestScore > 0.5 ? bestMatch : null;
+  }
+
+  function findMatchingCloseTag(source, startFrom, tagName) {
+    let depth = 1;
+    const openPattern = new RegExp(`<${tagName}[\\s>]`, 'gi');
+    const closePattern = new RegExp(`</${tagName}>`, 'gi');
+
+    openPattern.lastIndex = startFrom;
+    closePattern.lastIndex = startFrom;
+
+    const events = [];
+    let m;
+    while ((m = openPattern.exec(source)) !== null) {
+      events.push({ pos: m.index, type: 'open' });
+    }
+    while ((m = closePattern.exec(source)) !== null) {
+      events.push({ pos: m.index, type: 'close' });
+    }
+
+    events.sort((a, b) => a.pos - b.pos);
+
+    for (const event of events) {
+      if (event.type === 'open') depth++;
+      if (event.type === 'close') {
+        depth--;
+        if (depth === 0) return event.pos;
+      }
+    }
+
+    return -1;
   }
 
   function getTextNodes(root) {
@@ -317,7 +502,6 @@
     if (matches.length === 0) return -1;
     if (matches.length === 1) return matches[0].offset;
 
-    // Multiple matches: disambiguate by occurrence order
     const allLiveTextNodes = getTextNodes(document.body);
     let occurrenceIndex = 0;
     for (const node of allLiveTextNodes) {
@@ -335,37 +519,45 @@
   }
 
   // -------------------------------------------------------
-  // MutationObserver
+  // MutationObserver (characterData + childList for structural changes)
   // -------------------------------------------------------
   function startObserving() {
     mutations = [];
+    mutatedParents.clear();
 
     observer = new MutationObserver((mutationsList) => {
       for (const mutation of mutationsList) {
-        if (mutation.type !== 'characterData') continue;
+        if (mutation.type === 'characterData') {
+          const target = mutation.target;
 
-        const target = mutation.target;
+          const mapping = textNodeMap.find(m => m.liveNode === target);
+          if (!mapping) continue;
 
-        if (BLIP_CONFIG.observer.trackOnlyUserInitiated) {
-          if (!userInteractedNodes.has(target) && !userInteractedNodes.has(target.parentElement)) {
-            continue;
+          const existing = mutations.find(m => m.liveNode === target);
+          if (existing) {
+            existing.newText = target.textContent;
+          } else {
+            mutations.push({
+              liveNode: target,
+              originalText: mapping.originalText,
+              newText: target.textContent,
+              sourceOffset: mapping.sourceOffset,
+              sourceLength: mapping.sourceLength,
+              parentMapped: mapping.parentMapped
+            });
           }
         }
 
-        const mapping = textNodeMap.find(m => m.liveNode === target);
-        if (!mapping) continue;
-
-        const existing = mutations.find(m => m.liveNode === target);
-        if (existing) {
-          existing.newText = target.textContent;
-        } else {
-          mutations.push({
-            liveNode: target,
-            originalText: mapping.originalText,
-            newText: target.textContent,
-            sourceOffset: mapping.sourceOffset,
-            sourceLength: mapping.sourceLength
-          });
+        if (mutation.type === 'childList') {
+          const parent = mutation.target;
+          if (parent && parent.nodeType === Node.ELEMENT_NODE) {
+            mutatedParents.add(parent);
+            for (const pm of parentMap) {
+              if (pm.liveParent === parent || pm.liveParent.contains(parent)) {
+                mutatedParents.add(pm.liveParent);
+              }
+            }
+          }
         }
       }
     });
@@ -373,6 +565,7 @@
     setTimeout(() => {
       observer.observe(document.body, {
         characterData: true,
+        childList: true,
         subtree: true
       });
       devLog('Observer', 'active', 'success', 'observer-status');
@@ -384,45 +577,6 @@
       observer.disconnect();
       observer = null;
       devLog('Observer', 'stopped', '', 'observer-status');
-    }
-  }
-
-  // -------------------------------------------------------
-  // User interaction tracking
-  // -------------------------------------------------------
-  function trackUserInteractions() {
-    document.addEventListener('click', onUserInteract, true);
-    document.addEventListener('focus', onUserInteract, true);
-    document.addEventListener('keydown', onUserKeydown, true);
-  }
-
-  function untrackUserInteractions() {
-    document.removeEventListener('click', onUserInteract, true);
-    document.removeEventListener('focus', onUserInteract, true);
-    document.removeEventListener('keydown', onUserKeydown, true);
-    userInteractedNodes.clear();
-  }
-
-  function onUserInteract(e) {
-    if (e.target && e.target !== sidebarFrame) {
-      userInteractedNodes.add(e.target);
-      if (e.target.childNodes) {
-        for (const child of e.target.childNodes) {
-          if (child.nodeType === Node.TEXT_NODE) {
-            userInteractedNodes.add(child);
-          }
-        }
-      }
-    }
-  }
-
-  function onUserKeydown(e) {
-    const sel = window.getSelection();
-    if (sel && sel.anchorNode) {
-      userInteractedNodes.add(sel.anchorNode);
-      if (sel.anchorNode.parentElement) {
-        userInteractedNodes.add(sel.anchorNode.parentElement);
-      }
     }
   }
 
@@ -457,7 +611,6 @@
       devSeparator();
       devLog('Source', 'fetching from GitHub...', '', 'source-status');
 
-      // Step 1: Fetch source from GitHub
       const result = await fetchFromGitHub();
       sourceContent = result.content;
       sourceSHA = result.sha;
@@ -465,24 +618,17 @@
       devLog('Source', `fetched, ${result.size} bytes`, 'success', 'source-status');
       devLog('File SHA', result.sha.substring(0, 7) + ' (diffing against this)', 'success', 'file-sha');
 
-      // Step 2: Parse source DOM
       const parser = new DOMParser();
       sourceDOM = parser.parseFromString(sourceContent, 'text/html');
 
       const nodeCount = sourceDOM.body.querySelectorAll('*').length;
       devLog('Parsed source', `${nodeCount} elements`, 'success');
 
-      // Step 3: Build text node map
       buildTextNodeMap(document.body, sourceContent);
 
-      // Step 4: Set up interaction tracking and paste interception
-      trackUserInteractions();
       interceptPaste();
-
-      // Step 5: Start observing
       startObserving();
 
-      // Step 6: Enable design mode
       document.designMode = 'on';
       document.documentElement.classList.add('blip-editing');
       isEditing = true;
@@ -497,7 +643,7 @@
   }
 
   // -------------------------------------------------------
-  // Save
+  // Save (dual-track: simple offset replacement + parent innerHTML diff)
   // -------------------------------------------------------
   async function saveEdits() {
     if (!isEditing || !sourceContent) return;
@@ -507,49 +653,174 @@
       if (observer) {
         const pending = observer.takeRecords();
         for (const mutation of pending) {
-          if (mutation.type !== 'characterData') continue;
-          const target = mutation.target;
-          const mapping = textNodeMap.find(m => m.liveNode === target);
-          if (!mapping) continue;
-          const existing = mutations.find(m => m.liveNode === target);
-          if (existing) {
-            existing.newText = target.textContent;
-          } else {
-            mutations.push({
-              liveNode: target,
-              originalText: mapping.originalText,
-              newText: target.textContent,
-              sourceOffset: mapping.sourceOffset,
-              sourceLength: mapping.sourceLength
-            });
+          if (mutation.type === 'characterData') {
+            const target = mutation.target;
+            const mapping = textNodeMap.find(m => m.liveNode === target);
+            if (!mapping) continue;
+            const existing = mutations.find(m => m.liveNode === target);
+            if (existing) {
+              existing.newText = target.textContent;
+            } else {
+              mutations.push({
+                liveNode: target,
+                originalText: mapping.originalText,
+                newText: target.textContent,
+                sourceOffset: mapping.sourceOffset,
+                sourceLength: mapping.sourceLength,
+                parentMapped: mapping.parentMapped
+              });
+            }
+          }
+          if (mutation.type === 'childList') {
+            const parent = mutation.target;
+            if (parent && parent.nodeType === Node.ELEMENT_NODE) {
+              mutatedParents.add(parent);
+              for (const pm of parentMap) {
+                if (pm.liveParent === parent || pm.liveParent.contains(parent)) {
+                  mutatedParents.add(pm.liveParent);
+                }
+              }
+            }
           }
         }
       }
 
-      const actualChanges = mutations.filter(m => m.newText !== m.originalText);
-
       devSeparator();
-      devLog('Changes', `${actualChanges.length} edit${actualChanges.length !== 1 ? 's' : ''}`, 'success');
 
-      if (actualChanges.length === 0) {
+      // --- Track 1: simple text node changes ---
+      const simpleChanges = mutations.filter(m => !m.parentMapped && m.newText !== m.originalText);
+
+      // --- Track 2: parent-level innerHTML changes ---
+      const parentLevelChanges = [];
+
+      for (const pm of parentMap) {
+        const currentInnerHTML = pm.liveParent.innerHTML;
+        const normalizedCurrent = currentInnerHTML.replace(/\s+/g, ' ').trim();
+        const normalizedOriginal = pm.sourceInnerHTML.replace(/\s+/g, ' ').trim();
+
+        if (normalizedCurrent !== normalizedOriginal) {
+          parentLevelChanges.push({
+            liveParent: pm.liveParent,
+            originalInnerHTML: pm.sourceInnerHTML,
+            newInnerHTML: currentInnerHTML,
+            sourceOffset: pm.sourceOffset,
+            sourceLength: pm.sourceLength
+          });
+        }
+      }
+
+      // Also handle parents with structural (childList) mutations not in parentMap
+      for (const parent of mutatedParents) {
+        const alreadyInParentMap = parentMap.some(pm => pm.liveParent === parent);
+        if (alreadyInParentMap) continue;
+
+        const mapping = findParentInSource(parent, sourceContent);
+        if (mapping) {
+          const currentInnerHTML = parent.innerHTML;
+          const normalizedCurrent = currentInnerHTML.replace(/\s+/g, ' ').trim();
+          const normalizedOriginal = mapping.innerHTML.replace(/\s+/g, ' ').trim();
+
+          if (normalizedCurrent !== normalizedOriginal) {
+            parentLevelChanges.push({
+              liveParent: parent,
+              originalInnerHTML: mapping.innerHTML,
+              newInnerHTML: currentInnerHTML,
+              sourceOffset: mapping.offset,
+              sourceLength: mapping.length
+            });
+
+            // Remove simple changes inside this parent (handled at parent level now)
+            for (let i = simpleChanges.length - 1; i >= 0; i--) {
+              const changeParent = simpleChanges[i].liveNode.parentElement;
+              if (changeParent === parent || parent.contains(changeParent)) {
+                simpleChanges.splice(i, 1);
+              }
+            }
+          }
+        }
+      }
+
+      const totalChanges = simpleChanges.length + parentLevelChanges.length;
+      devLog('Changes', `${totalChanges} edit${totalChanges !== 1 ? 's' : ''} (${simpleChanges.length} simple, ${parentLevelChanges.length} parent-level)`, 'success');
+
+      if (totalChanges === 0) {
         sendToSidebar('error', { message: 'No changes detected' });
         return;
       }
 
-      for (const change of actualChanges) {
+      for (const change of simpleChanges) {
         const selector = getCssSelector(change.liveNode);
         devLog('Edited', selector, 'success');
         devLog('\u2192', change.newText, '');
       }
+      for (const change of parentLevelChanges) {
+        const selector = getCssSelector(change.liveParent);
+        devLog('Edited (parent)', selector, 'success');
+        devLog('\u2192', change.newInnerHTML.substring(0, 200) + (change.newInnerHTML.length > 200 ? '...' : ''), '');
+      }
 
-      // Apply changes to source (reverse offset order to preserve positions)
+      // Build all replacements
+      const allReplacements = [];
+
+      for (const change of simpleChanges) {
+        allReplacements.push({
+          sourceOffset: change.sourceOffset,
+          sourceLength: change.sourceLength,
+          replacement: change.newText,
+          type: 'simple'
+        });
+      }
+
+      for (const change of parentLevelChanges) {
+        allReplacements.push({
+          sourceOffset: change.sourceOffset,
+          sourceLength: change.sourceLength,
+          replacement: change.newInnerHTML,
+          type: 'parent'
+        });
+      }
+
+      // Sort descending by offset (apply from end to preserve positions)
+      allReplacements.sort((a, b) => b.sourceOffset - a.sourceOffset);
+
+      // Resolve overlapping replacements (prefer parent-level)
+      for (let i = 0; i < allReplacements.length - 1; i++) {
+        const current = allReplacements[i];
+        const next = allReplacements[i + 1];
+        const nextEnd = next.sourceOffset + next.sourceLength;
+        if (nextEnd > current.sourceOffset) {
+          if (current.type === 'parent') {
+            allReplacements.splice(i + 1, 1);
+            i--;
+          } else if (next.type === 'parent') {
+            allReplacements.splice(i, 1);
+            i--;
+          }
+        }
+      }
+
+      // Apply replacements to source
       let newContent = sourceContent;
-      const sorted = actualChanges.sort((a, b) => b.sourceOffset - a.sourceOffset);
+      for (const rep of allReplacements) {
+        const before = newContent.substring(0, rep.sourceOffset);
+        const after = newContent.substring(rep.sourceOffset + rep.sourceLength);
+        newContent = before + rep.replacement + after;
+      }
 
-      for (const change of sorted) {
-        const before = newContent.substring(0, change.sourceOffset);
-        const after = newContent.substring(change.sourceOffset + change.sourceLength);
-        newContent = before + change.newText + after;
+      // LLM safety net: validate parent-level changes
+      let usedLLM = false;
+      if (parentLevelChanges.length > 0 && BLIP_CONFIG.llm && BLIP_CONFIG.llm.enabled) {
+        const validation = validateHTML(newContent);
+        if (!validation.valid) {
+          devLog('Validation', 'structural issue detected, calling LLM...', 'error');
+          try {
+            newContent = await llmRepair(sourceContent, newContent, parentLevelChanges);
+            usedLLM = true;
+            devLog('LLM repair', 'applied', 'success');
+          } catch (llmErr) {
+            devLog('LLM repair', `failed: ${llmErr.message}`, 'error');
+          }
+        }
       }
 
       devLog('Commit', 'pushing to GitHub...', '', 'commit-status');
@@ -559,7 +830,7 @@
       sourceSHA = result.sha;
       sourceContent = newContent;
 
-      devLog('Commit', result.commitSha.substring(0, 7) + ' (view on GitHub)', 'success', 'commit-status');
+      devLog('Commit', result.commitSha.substring(0, 7) + (usedLLM ? ' (LLM-repaired)' : '') + ' (view on GitHub)', 'success', 'commit-status');
       devLog('File SHA', result.sha.substring(0, 7) + ' (new base for next edit)', 'success', 'file-sha');
 
       buildTextNodeMap(document.body, sourceContent, true);
@@ -574,6 +845,94 @@
   }
 
   // -------------------------------------------------------
+  // HTML validation (quick structural check)
+  // -------------------------------------------------------
+  function validateHTML(htmlString) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, 'text/html');
+    const errors = doc.querySelectorAll('parsererror');
+
+    const corruptionPatterns = [
+      /[^<]\/(h[1-6]|p|div|span|strong|em|a|ul|ol|li|section|article|header|footer|nav|main|aside)>/i,
+      /<(h[1-6]|p|div|span|strong|em)[^>]*>[^<]*<\/(?!\1)[^>]*>/i
+    ];
+
+    let hasCorruption = false;
+    for (const pattern of corruptionPatterns) {
+      if (pattern.test(htmlString)) {
+        hasCorruption = true;
+        break;
+      }
+    }
+
+    return {
+      valid: errors.length === 0 && !hasCorruption,
+      errorCount: errors.length,
+      hasCorruption
+    };
+  }
+
+  // -------------------------------------------------------
+  // LLM repair via Groq (safety net for structural corruption)
+  // -------------------------------------------------------
+  async function llmRepair(originalSource, corruptedSource, parentChanges) {
+    const changedRegions = parentChanges.map(change => {
+      const selector = getCssSelector(change.liveParent);
+      return {
+        selector,
+        originalFragment: change.originalInnerHTML,
+        newFragment: change.newInnerHTML
+      };
+    });
+
+    const systemPrompt = 'You are an automated HTML syntax checker. Fix broken HTML syntax only. Preserve all intended content changes. Output ONLY raw corrected HTML. No explanations or markdown.';
+
+    const userPrompt = `Original HTML fragments and their edited versions are below. The edits may have introduced broken HTML syntax (missing brackets, broken tags, unclosed elements). Fix ONLY the syntax errors. Preserve ALL intended text content changes.
+
+${changedRegions.map((r, i) => `Fragment ${i + 1} (${r.selector}):
+Original: ${r.originalFragment}
+Edited: ${r.newFragment}`).join('\n\n')}
+
+Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers. No explanations.`;
+
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        {
+          type: 'LLM_REPAIR',
+          llmConfig: BLIP_CONFIG.llm,
+          systemPrompt,
+          userPrompt
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else if (!response.success) {
+            reject(new Error(response.error));
+          } else {
+            const repairedText = response.data.content;
+            const repairedFragments = repairedText.split('---FRAGMENT---').map(f => f.trim());
+
+            let repairedSource = corruptedSource;
+            for (let i = 0; i < parentChanges.length && i < repairedFragments.length; i++) {
+              const change = parentChanges[i];
+              const repairedFragment = repairedFragments[i];
+              if (repairedFragment) {
+                repairedSource = repairedSource.replace(change.newInnerHTML, repairedFragment);
+              }
+            }
+
+            if (response.data.usage) {
+              devLog('LLM tokens', `${response.data.usage.prompt_tokens} in, ${response.data.usage.completion_tokens} out`, '');
+            }
+
+            resolve(repairedSource);
+          }
+        }
+      );
+    });
+  }
+
+  // -------------------------------------------------------
   // Cancel
   // -------------------------------------------------------
   function cancelEdits() {
@@ -582,6 +941,12 @@
     for (const mapping of textNodeMap) {
       if (mapping.liveNode && mapping.liveNode.textContent !== mapping.originalText) {
         mapping.liveNode.textContent = mapping.originalText;
+      }
+    }
+
+    for (const pm of parentMap) {
+      if (pm.liveParent && pm.liveParent.innerHTML !== pm.originalInnerHTML) {
+        pm.liveParent.innerHTML = pm.originalInnerHTML;
       }
     }
 
@@ -626,8 +991,8 @@
     isEditing = false;
     devLog('Mode', 'designMode OFF', '', 'edit-mode');
     mutations = [];
+    mutatedParents.clear();
     stopObserving();
-    untrackUserInteractions();
     uninterceptPaste();
   }
 

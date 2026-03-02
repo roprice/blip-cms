@@ -15,6 +15,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
+
+  if (message.type === 'LLM_REPAIR') {
+    llmRepairCall(message.llmConfig, message.systemPrompt, message.userPrompt)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
 });
 
 async function githubFetchFile(config) {
@@ -86,5 +93,36 @@ async function githubCommitFile(config, newContent, sha) {
     commitSha: data.commit.sha,
     commitMessage: commitMessage,
     commitUrl: data.commit.html_url
+  };
+}
+
+async function llmRepairCall(llmConfig, systemPrompt, userPrompt) {
+  const response = await fetch(llmConfig.endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${llmConfig.apiKey}`
+    },
+    body: JSON.stringify({
+      model: llmConfig.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0,
+      max_tokens: 2048
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`LLM API returned ${response.status}: ${body}`);
+  }
+
+  const data = await response.json();
+  return {
+    content: data.choices[0].message.content.trim(),
+    model: data.model,
+    usage: data.usage
   };
 }

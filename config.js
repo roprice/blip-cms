@@ -31,7 +31,14 @@ const BLIP_CONFIG = {
 
   // MutationObserver settings
   observer: {
-    settleDelayMs: 150,
-    trackOnlyUserInitiated: true
+    settleDelayMs: 150
+  },
+
+  // LLM safety net (Groq)
+  llm: {
+    enabled: false,  // set to true and add API key to enable
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    model: 'llama-3.3-70b-versatile',
+    apiKey: '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'
   }
 };
