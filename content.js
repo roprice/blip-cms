@@ -82,11 +82,12 @@
     collapsedTab = document.createElement('div');
     collapsedTab.id = 'blip-collapsed-tab';
     collapsedTab.className = 'blip-tab-state-default';
+    collapsedTab.setAttribute('contenteditable', 'false');
     collapsedTab.innerHTML = `
       <span class="blip-tab-name">blip</span>
       <span class="blip-tab-control blip-tab-show-default" data-action="startEdit">edit</span>
-      <span class="blip-tab-control blip-tab-show-editing" data-action="save">save</span>
-      <span class="blip-tab-control blip-tab-show-saving">saving\u2026</span>
+      <span class="blip-tab-control blip-tab-show-editing" data-action="save">save<span class="blinking"></span></span>
+      <span class="blip-tab-control blip-tab-show-saving">saving<span class="blip-tab-dots"></span></span>
       <span class="blip-tab-control blip-tab-show-saved">saved!</span>
       <span class="blip-tab-control blip-tab-show-error" data-action="startEdit">retry</span>
       <span class="blip-tab-expand" data-action="expand" title="Open sidebar">\u203A\u203A</span>
@@ -97,8 +98,12 @@
     collapsedTab.addEventListener('mouseenter', onTabMouseEnter);
     collapsedTab.addEventListener('mouseleave', onTabMouseLeave);
 
-    // Click delegation
-    collapsedTab.addEventListener('click', onTabClick);
+    // Click delegation - prevent designMode from capturing
+    collapsedTab.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+    collapsedTab.addEventListener('click', onTabClick, true);
   }
 
   let tabContractTimer = null;

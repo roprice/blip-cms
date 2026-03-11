@@ -172,13 +172,13 @@ window.addEventListener('message', (event) => {
         case 'recovered':
             // Recovery complete: show success and re-enable editing
             showDefault();
-            showNotification('Synced. Your edits were not saved, but you can try again.', 'error');
+            showNotification('Could not sync. Try reloading the page and trying again', 'info');
             break;
 
         case 'recoveryFailed':
             // Recovery failed: show reload option
             showDefault();
-            showErrorWithReload(msg.userMessage || 'Could not sync. Please reload the page.');
+            showErrorWithReload(msg.userMessage || 'Could not sync. Try reloading the page and trying again.');
             break;
 
         case 'error':
@@ -186,7 +186,7 @@ window.addEventListener('message', (event) => {
             if (msg.recoverable) {
                 showNotification(msg.userMessage || 'Something went wrong', 'error');
             } else {
-                showErrorWithReload(msg.userMessage || 'Something went wrong. Try reloading the page.');
+                showErrorWithReload(msg.userMessage || 'Could not sync. Try reloading the page and trying again.');
             }
             break;
 

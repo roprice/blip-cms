@@ -1,189 +1,241 @@
-    :root {
-      /* Provided base colors */
-      --bg: #eef3ed;
-      --border: #d1d5db;
+/* Blip content styles - injected into the host page */
 
-      /* Derived Palette */
-      --surface: #ffffff;
-      --text: #2d362b;
-      --text-muted: #6b7a68;
+#blip-sidebar-frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  border: none;
+  z-index: 2147483646;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
+  transition: width 0.2s ease;
+}
 
-      /* Accent: Replacing the blue with a cohesive Forest Green */
-      --accent: #16a34a;
-      --accent-hover: #15803d;
+/* Page shift when sidebar is open */
+html.blip-sidebar-open body {
+  margin-left: var(--blip-sidebar-width, 300px) !important;
+  transition: margin-left 0.2s ease;
+  width: calc(100% - var(--blip-sidebar-width, 300px));
+}
 
-      /* Semantic: Muted tones to avoid "neon" clashing */
-      --success: #16a34a;
-      --error: #dc2626;
+/* Drag handle */
+#blip-drag-handle {
+  position: fixed;
+  top: 0;
+  width: 6px;
+  height: 100vh;
+  cursor: ew-resize;
+  z-index: 2147483647;
+  background: transparent;
+  transition: background 0.15s, left 0.2s ease;
+}
 
-      /* Utility */
-      --dev-bg: #f1f1f1;
-      --dev-text: #8a9987;
-    }
+#blip-drag-handle:hover {
+  background: rgba(22, 163, 74, 0.25);
+}
+
+/* -------------------------------------------------------
+   Collapsed tab - mini control panel
+   ------------------------------------------------------- */
+#blip-collapsed-tab {
+  position: fixed;
+  top: 12px;
+  left: 0;
+  z-index: 2147483647;
+  background: rgb(232 241 229);
+  border: 1px solid rgb(195 226 187);
+  border-left: none;
+  color: #555;
+  opacity: 0.5;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 7px 8px;
+  border-radius: 0 6px 6px 0;
+  cursor: default;
+  display: none;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: width 0.2s ease, background 0.2s ease, opacity 0.15s ease, border-color 0.2s ease;
+  width: 38px;
+  /* Prevent designMode from capturing events */
+  -webkit-user-modify: read-only;
+  user-select: none;
+}
+
+#blip-collapsed-tab * {
+  -webkit-user-modify: read-only;
+}
+
+#blip-collapsed-tab:hover {
+  opacity: 1;
+}
+
+#blip-collapsed-tab .blip-tab-name {
+  pointer-events: none;
+}
+
+/* Controls: hidden by default */
+#blip-collapsed-tab .blip-tab-control {
+  display: none;
+  padding-left: 8px;
+  width: 54px;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.1s;
+}
+
+#blip-collapsed-tab .blip-tab-control:hover {
+  opacity: 1;
+}
+
+/* Expand icon */
+#blip-collapsed-tab .blip-tab-expand {
+  display: none;
+  padding-left: 9px;
+  cursor: pointer;
+  letter-spacing: -3px;
+  transition: opacity 0.1s;
+  position: absolute;
+  top: 5px;
+  font-size: 20px;
+  line-height: 20px;
+  right: 8px;
+  opacity: 0.8;
+}
+
+#blip-collapsed-tab .blip-tab-expand:hover {
+  opacity: 1;
+}
+
+/* Expanded state (on hover or active) - show controls */
+#blip-collapsed-tab.blip-tab-expanded {
+  width: 106px;
+}
+
+#blip-collapsed-tab.blip-tab-expanded .blip-tab-expand {
+  display: inline-block;
+}
+
+/* -------------------------------------------------------
+   Tab states
+   ------------------------------------------------------- */
+
+/* Default - show "edit" on expand */
+#blip-collapsed-tab.blip-tab-state-default.blip-tab-expanded .blip-tab-show-default {
+  display: inline-block;
+}
+
+/* Editing - green, show "save" */
+#blip-collapsed-tab.blip-tab-state-editing {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #f1f1f1;
+  opacity: 1;
+  cursor: pointer;
+}
+
+#blip-collapsed-tab.blip-tab-state-editing.blip-tab-expanded .blip-tab-show-editing {
+  display: inline-block;
+}
 
 
+@keyframes blink {
+  0% {
+    opacity: 1;
+  }
 
+  50% {
+    opacity: 0;
+  }
 
+  100% {
+    opacity: 1;
+  }
+}
 
-    /* Blip content styles - injected into the host page */
-
-    #blip-sidebar-frame {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      border: none;
-      z-index: 2147483646;
-      box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
-      transition: width 0.2s ease;
-    }
-
-    /* Page shift when sidebar is open - applied to body so fixed sidebar stays at left:0 */
-    html.blip-sidebar-open body {
-      margin-left: var(--blip-sidebar-width, 300px) !important;
-      transition: margin-left 0.2s ease;
-      width: calc(100% - var(--blip-sidebar-width, 300px));
-    }
-
-
-    /* Collapsed tab - mini control panel */
-    #blip-collapsed-tab {
-      position: fixed;
-      top: 12px;
-      left: 0;
-      z-index: 2147483647;
-      background: rgb(232 241 229);
-      border: 1px solid rgb(195 226 187);
-      color: #333;
-      opacity: .5;
-      border-left: none;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      padding: 7px 8px;
-      border-radius: 0 6px 6px 0;
-      cursor: default;
-      display: none;
-      white-space: nowrap;
-      overflow: hidden;
-      transition: width 0.2s ease, background 0.2s ease;
-      width: 38px;
-      /* collapsed: just "blip" */
-    }
-
-    #blip-collapsed-tab:hover {
-      opacity: 1;
-    }
-
-    /* Expanded state (on hover or active) - show controls */
-    #blip-collapsed-tab.blip-tab-expanded {
-      width: 136px;
-    }
-
-    #blip-collapsed-tab .blip-tab-control:hover {
-      opacity: 1;
-    }
-
-    /* State: editing - green bg, show "save" */
-    #blip-collapsed-tab.blip-tab-state-editing {
-      background: #16a34a;
-      border-color: #16a34a;
-      cursor: pointer;
-      color: #f1f1f1;
-      opacity: 1;
-    }
-
-    /* State: saving - green bg, show "saving..." */
-    #blip-collapsed-tab.blip-tab-state-saving {
-      background: #16a34a;
-      border-color: #16a34a;
-      opacity: 0.6;
-      cursor: default;
-      color: #f1f1f1;
-    }
-
-    /* State: saved - brief green flash */
-    #blip-collapsed-tab.blip-tab-state-saved {
-      background: #16a34a;
-      border-color: #16a34a;
-      color: #f1f1f1;
-      opacity: 1;
-    }
-
-    /* State: error - red bg, show "retry" */
-    #blip-collapsed-tab.blip-tab-state-error {
-      background: #dc2626;
-      border-color: #dc2626;
-      color: #f1f1f1;
-      opacity: 1;
-    }
-
-
-    #blip-collapsed-tab .blip-tab-name {
-      pointer-events: none;
-    }
-
-
-
-
-    /* Controls: hidden by default */
-    #blip-collapsed-tab .blip-tab-control {
-      display: none;
-      padding-left: 8px;
-      width: 56px;
-      text-align: center;
-      cursor: pointer;
-      opacity: 0.85;
-      transition: opacity 0.1s;
-    }
-
-    /* State: default - show "edit" control on expand */
-    #blip-collapsed-tab.blip-tab-state-default.blip-tab-expanded .blip-tab-show-default {
-      display: inline-block;
-    }
-
-    /* State: editing - show "save" control on expand */
-    #blip-collapsed-tab.blip-tab-state-editing.blip-tab-expanded .blip-tab-show-editing {
-      display: inline-block;
-    }
-
-    /* State: saving - show "saving..." control on expand */
-    #blip-collapsed-tab.blip-tab-state-saving.blip-tab-expanded .blip-tab-show-saving {
-      display: inline-block;
-    }
-
-    /* State: saved - show "retry" control on expand */
-    #blip-collapsed-tab.blip-tab-state-saved.blip-tab-expanded .blip-tab-show-saved {
-      display: inline-block;
-    }
-
-    /* State: error - show "retry" control on expand */
-    #blip-collapsed-tab.blip-tab-state-error.blip-tab-expanded .blip-tab-show-error {
-      display: inline-block;
-    }
-
-    #blip-collapsed-tab.blip-tab-expanded .blip-tab-expand {
-      display: inline-block;
-    }
+@media (prefers-reduced-motion: no-preference) {
+  .blinking {
+    animation: blink 1s step-start infinite;
+  }
+}
 
 
 
-    /* Expand icon */
-    #blip-collapsed-tab .blip-tab-expand {
-      display: none;
-      padding-left: 10px;
-      cursor: pointer;
-      opacity: 0.6;
-      font-size: 12px;
-      letter-spacing: -3px;
-      transition: opacity 0.1s;
-      position: absolute;
-      right: 14px;
-      top: 0px;
-      font-size: 18px
-    }
+/* Saving - green, dimmed, show "saving..." with animated dots */
+#blip-collapsed-tab.blip-tab-state-saving {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #f1f1f1;
+  opacity: 0.7;
+  cursor: default;
+  animation: blip-saving-pulse 1.5s ease-in-out infinite;
+}
 
-    #blip-collapsed-tab .blip-tab-expand:hover {
-      opacity: 1;
-    }
+#blip-collapsed-tab.blip-tab-state-saving.blip-tab-expanded .blip-tab-show-saving {
+  display: inline-block;
+  cursor: default;
+}
+
+@keyframes blip-saving-pulse {
+
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Ellipsis animation for saving dots */
+#blip-collapsed-tab .blip-tab-dots::after {
+  content: '';
+  animation: blip-dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes blip-dots {
+  0% {
+    content: '';
+  }
+
+  25% {
+    content: '.';
+  }
+
+  50% {
+    content: '..';
+  }
+
+  75% {
+    content: '...';
+  }
+}
+
+/* Saved - green, show "saved!" */
+#blip-collapsed-tab.blip-tab-state-saved {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #f1f1f1;
+  opacity: 1;
+}
+
+#blip-collapsed-tab.blip-tab-state-saved.blip-tab-expanded .blip-tab-show-saved {
+  display: inline-block;
+  cursor: default;
+}
+
+/* Error - red, show "retry" */
+#blip-collapsed-tab.blip-tab-state-error {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #f1f1f1;
+  opacity: 1;
+}
+
+#blip-collapsed-tab.blip-tab-state-error.blip-tab-expanded .blip-tab-show-error {
+  display: inline-block;
+}
