@@ -7,8 +7,14 @@ const BLIP_CONFIG = {
     owner: 'roprice',
     repo: 'remaphq-site',
     branch: 'main',
-    filePath: 'index.html',
     token: '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'
+  },
+
+  // File resolution
+  files: {
+    editableExtensions: ['.html', '.php'],
+    // Files matching these patterns are excluded from the editable list
+    excludePatterns: ['template']
   },
 
   // Site matching
@@ -20,7 +26,8 @@ const BLIP_CONFIG = {
   sidebar: {
     defaultWidthPx: 300,
     minWidthPx: 180,
-    maxWidthPx: 500
+    maxWidthPx: 500,
+    startCollapsed: true
   },
 
   // Dev mode
@@ -36,9 +43,9 @@ const BLIP_CONFIG = {
 
   // LLM safety net (Groq)
   llm: {
-    enabled: false,  // set to true and add API key to enable
+    enabled: false,
     endpoint: 'https://api.groq.com/openai/v1/chat/completions',
     model: 'llama-3.3-70b-versatile',
-    apiKey: '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'
+    apiKey: 'YOUR_GROQ_API_KEY'
   }
 };

@@ -17,6 +17,16 @@
   let observer = null;        // MutationObserver
   let mutations = [];         // recorded characterData mutations
   let mutatedParents = new Set(); // parents that had structural (childList) mutations
+  let isSaving = false;       // lock to prevent concurrent saves
+  let lastSaveTime = 0;       // timestamp of last successful save
+  let lastSaveData = null;    // { content, sha } from last successful save
+  let hasEdits = false;       // whether any mutations have been detected
+  const SAVE_GRACE_MS = 5000; // use cached data if editing within this window
+
+  // Multi-file state
+  let repoFiles = [];         // list of files from GitHub repo
+  let editableFiles = [];     // filtered to editable extensions
+  let resolvedFilePath = null; // the file path resolved for the current URL
 
   // -------------------------------------------------------
   // Sidebar injection
@@ -29,21 +39,27 @@
     if (document.getElementById('blip-sidebar-frame')) return;
 
     const width = BLIP_CONFIG.sidebar.defaultWidthPx;
-    currentSidebarWidth = width;
 
     sidebarFrame = document.createElement('iframe');
     sidebarFrame.id = 'blip-sidebar-frame';
     sidebarFrame.src = chrome.runtime.getURL('sidebar.html');
     sidebarFrame.style.width = width + 'px';
 
-    document.documentElement.style.setProperty('--blip-sidebar-width', width + 'px');
-    document.documentElement.classList.add('blip-sidebar-open');
     document.documentElement.appendChild(sidebarFrame);
 
     injectDragHandle(width);
     injectCollapsedTab();
 
     window.addEventListener('message', handleSidebarMessage);
+
+    // Start collapsed or expanded based on config
+    if (BLIP_CONFIG.sidebar.startCollapsed) {
+      collapseSidebar();
+    } else {
+      currentSidebarWidth = width;
+      document.documentElement.style.setProperty('--blip-sidebar-width', width + 'px');
+      document.documentElement.classList.add('blip-sidebar-open');
+    }
   }
 
   function injectDragHandle(initialLeft) {
@@ -191,6 +207,9 @@
         cancelEdits();
         collapseSidebar();
         break;
+      case 'reloadPage':
+        window.location.reload();
+        break;
     }
   }
 
@@ -198,9 +217,10 @@
     devLog('Site', window.location.hostname, 'success');
     devLog('Repo', `${BLIP_CONFIG.github.owner}/${BLIP_CONFIG.github.repo}`, '');
     devLog('Branch', BLIP_CONFIG.github.branch, '');
-    devLog('File', BLIP_CONFIG.github.filePath, '');
+    devLog('Path', window.location.pathname, '');
+    devLog('File', resolvedFilePath || 'resolving...', resolvedFilePath ? 'success' : '', 'resolved-file');
     devSeparator();
-    devLog('Source', 'not yet fetched (click Edit)', '', 'source-status');
+    devLog('Source', 'initializing...', '', 'source-status');
     devLog('File SHA', '-', '', 'file-sha');
     devSeparator();
     devLog('Mode', 'designMode OFF', '', 'edit-mode');
@@ -210,10 +230,28 @@
   // -------------------------------------------------------
   // GitHub communication (via background script)
   // -------------------------------------------------------
-  async function fetchFromGitHub() {
+  async function listRepoFiles() {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
-        { type: 'GITHUB_FETCH', config: BLIP_CONFIG.github },
+        { type: 'GITHUB_LIST_FILES', config: BLIP_CONFIG.github },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else if (response.success) {
+            resolve(response.data);
+          } else {
+            reject(new Error(response.error));
+          }
+        }
+      );
+    });
+  }
+
+  async function fetchFromGitHub(filePath) {
+    const configWithPath = { ...BLIP_CONFIG.github, filePath: filePath || resolvedFilePath };
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { type: 'GITHUB_FETCH', config: configWithPath },
         (response) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
@@ -228,9 +266,10 @@
   }
 
   async function commitToGitHub(content, sha) {
+    const configWithPath = { ...BLIP_CONFIG.github, filePath: resolvedFilePath };
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
-        { type: 'GITHUB_COMMIT', config: BLIP_CONFIG.github, content, sha },
+        { type: 'GITHUB_COMMIT', config: configWithPath, content, sha },
         (response) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
@@ -241,6 +280,66 @@
           }
         }
       );
+    });
+  }
+
+  // -------------------------------------------------------
+  // File resolution: URL path → repo file path
+  // -------------------------------------------------------
+  function resolveFilePath(pathname, files) {
+    // Clean the pathname
+    let path = pathname.replace(/^\/+|\/+$/g, ''); // strip leading/trailing slashes
+
+    // Root path → index.html
+    if (!path || path === '') {
+      const indexFile = files.find(f => f.name === 'index.html');
+      return indexFile ? indexFile.path : null;
+    }
+
+    // Strip trailing slash and hash/query
+    path = path.split('#')[0].split('?')[0];
+
+    // Strategy 1: exact match (e.g., path is "strategy-agent.html")
+    const exactMatch = files.find(f => f.path === path || f.name === path);
+    if (exactMatch) return exactMatch.path;
+
+    // Strategy 2: append each editable extension
+    for (const ext of BLIP_CONFIG.files.editableExtensions) {
+      const withExt = path + ext;
+      const match = files.find(f => f.path === withExt || f.name === withExt);
+      if (match) return match.path;
+    }
+
+    // Strategy 3: try the last segment of the path (for /about → about.html)
+    const lastSegment = path.split('/').pop();
+    if (lastSegment !== path) {
+      for (const ext of BLIP_CONFIG.files.editableExtensions) {
+        const withExt = lastSegment + ext;
+        const match = files.find(f => f.name === withExt);
+        if (match) return match.path;
+      }
+    }
+
+    return null;
+  }
+
+  function filterEditableFiles(files) {
+    return files.filter(f => {
+      // Must have an editable extension
+      const hasEditableExt = BLIP_CONFIG.files.editableExtensions.some(ext =>
+        f.name.toLowerCase().endsWith(ext)
+      );
+      if (!hasEditableExt) return false;
+
+      // Exclude files matching exclude patterns
+      if (BLIP_CONFIG.files.excludePatterns) {
+        const excluded = BLIP_CONFIG.files.excludePatterns.some(pattern =>
+          f.name.toLowerCase().includes(pattern.toLowerCase())
+        );
+        if (excluded) return false;
+      }
+
+      return true;
     });
   }
 
@@ -546,6 +645,11 @@
               parentMapped: mapping.parentMapped
             });
           }
+
+          if (!hasEdits) {
+            hasEdits = true;
+            sendToSidebar('editsDetected');
+          }
         }
 
         if (mutation.type === 'childList') {
@@ -556,6 +660,10 @@
               if (pm.liveParent === parent || pm.liveParent.contains(parent)) {
                 mutatedParents.add(pm.liveParent);
               }
+            }
+            if (!hasEdits) {
+              hasEdits = true;
+              sendToSidebar('editsDetected');
             }
           }
         }
@@ -609,14 +717,39 @@
   async function startEditSession() {
     try {
       devSeparator();
-      devLog('Source', 'fetching from GitHub...', '', 'source-status');
 
-      const result = await fetchFromGitHub();
-      sourceContent = result.content;
-      sourceSHA = result.sha;
+      // Guard: must have a resolved file
+      if (!resolvedFilePath) {
+        sendToSidebar('error', {
+          userMessage: 'No editable file found for this page.',
+          recoverable: false
+        });
+        return;
+      }
 
-      devLog('Source', `fetched, ${result.size} bytes`, 'success', 'source-status');
-      devLog('File SHA', result.sha.substring(0, 7) + ' (diffing against this)', 'success', 'file-sha');
+      const withinGracePeriod = lastSaveData && (Date.now() - lastSaveTime < SAVE_GRACE_MS);
+
+      if (withinGracePeriod) {
+        // Use cached data from last save
+        sourceContent = lastSaveData.content;
+        sourceSHA = lastSaveData.sha;
+        devLog('Source', `using cached version (saved ${Math.round((Date.now() - lastSaveTime) / 1000)}s ago)`, 'success', 'source-status');
+        devLog('File SHA', sourceSHA.substring(0, 7) + ' (cached from last save)', 'success', 'file-sha');
+      } else if (sourceContent && sourceSHA) {
+        // Use prefetched baseline (already loaded at init or from last successful save)
+        devLog('Source', `using baseline (${sourceContent.length} bytes)`, 'success', 'source-status');
+        devLog('File SHA', sourceSHA.substring(0, 7) + ' (baseline)', 'success', 'file-sha');
+      } else {
+        // Fallback: fetch now (prefetch may have failed)
+        devLog('Source', 'fetching from GitHub...', '', 'source-status');
+        const t0 = Date.now();
+        const result = await fetchFromGitHub();
+        const latency = Date.now() - t0;
+        sourceContent = result.content;
+        sourceSHA = result.sha;
+        devLog('Source', `fetched (${latency}ms, ${result.size} bytes)`, 'success', 'source-status');
+        devLog('File SHA', result.sha.substring(0, 7) + ' (fetched)', 'success', 'file-sha');
+      }
 
       const parser = new DOMParser();
       sourceDOM = parser.parseFromString(sourceContent, 'text/html');
@@ -638,7 +771,10 @@
 
     } catch (err) {
       devLog('Error', err.message, 'error');
-      sendToSidebar('error', { message: `Failed to start: ${err.message}` });
+      sendToSidebar('error', {
+        userMessage: 'Could not start editing. Try reloading the page.',
+        recoverable: false
+      });
     }
   }
 
@@ -646,7 +782,8 @@
   // Save (dual-track: simple offset replacement + parent innerHTML diff)
   // -------------------------------------------------------
   async function saveEdits() {
-    if (!isEditing || !sourceContent) return;
+    if (!isEditing || !sourceContent || isSaving) return;
+    isSaving = true;
 
     try {
       // Flush pending observer records
@@ -744,7 +881,8 @@
       devLog('Changes', `${totalChanges} edit${totalChanges !== 1 ? 's' : ''} (${simpleChanges.length} simple, ${parentLevelChanges.length} parent-level)`, 'success');
 
       if (totalChanges === 0) {
-        sendToSidebar('error', { message: 'No changes detected' });
+        isSaving = false;
+        sendToSidebar('noChanges');
         return;
       }
 
@@ -823,26 +961,113 @@
         }
       }
 
+      // --- Transaction log ---
+      const txId = Date.now();
+      const pushTimestamp = new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
+      devSeparator();
+      devLog('TX', `#${txId} push initiated at ${pushTimestamp}`, '', 'tx-start');
+      devLog('Payload SHA', sourceSHA.substring(0, 7) + ' (sent to GitHub)', '', 'tx-payload-sha');
       devLog('Commit', 'pushing to GitHub...', '', 'commit-status');
 
+      const t0 = Date.now();
       const result = await commitToGitHub(newContent, sourceSHA);
+      const latency = Date.now() - t0;
 
+      const responseTimestamp = new Date().toISOString().slice(11, 23);
+      devLog('TX', `#${txId} response at ${responseTimestamp} (${latency}ms)`, 'success', 'tx-response');
+      devLog('HTTP', '200 OK', 'success', 'tx-http');
+      devLog('Returned SHA', result.sha.substring(0, 7) + ' (from server)', 'success', 'tx-returned-sha');
+
+      // Update local state
+      const oldSHA = sourceSHA;
       sourceSHA = result.sha;
       sourceContent = newContent;
 
-      devLog('Commit', result.commitSha.substring(0, 7) + (usedLLM ? ' (LLM-repaired)' : '') + ' (view on GitHub)', 'success', 'commit-status');
-      devLog('File SHA', result.sha.substring(0, 7) + ' (new base for next edit)', 'success', 'file-sha');
+      // Cache for grace period
+      lastSaveTime = Date.now();
+      lastSaveData = { content: newContent, sha: result.sha };
+
+      // State confirmation
+      const stateUpdated = sourceSHA === result.sha;
+      devLog('State', stateUpdated
+        ? `\u2713 local SHA updated: ${oldSHA.substring(0, 7)} \u2192 ${sourceSHA.substring(0, 7)}`
+        : `\u2717 SHA mismatch! local=${sourceSHA.substring(0, 7)} server=${result.sha.substring(0, 7)}`,
+        stateUpdated ? 'success' : 'error',
+        'tx-state'
+      );
+
+      devLog('Commit', result.commitSha.substring(0, 7) + (usedLLM ? ' (LLM-repaired)' : ''), 'success', 'commit-status');
 
       buildTextNodeMap(document.body, sourceContent, true);
 
       exitEditMode();
+      isSaving = false;
       sendToSidebar('saved');
 
     } catch (err) {
+      isSaving = false;
+      const errorTimestamp = new Date().toISOString().slice(11, 23);
+
+      // Extract HTTP status if available
+      const statusMatch = err.message.match(/\((\d{3})\)/);
+      const httpStatus = statusMatch ? statusMatch[1] : 'unknown';
+      const is409 = httpStatus === '409';
+      const isNetwork = err.message.includes('Failed to fetch') || err.message.includes('NetworkError');
+
+      devLog('TX', `error at ${errorTimestamp}`, 'error', 'tx-response');
+      devLog('HTTP', isNetwork ? 'network failure' : httpStatus, 'error', 'tx-http');
+      devLog('Payload SHA', sourceSHA.substring(0, 7) + ' (was sent)', 'error', 'tx-payload-sha');
       devLog('Error', err.message, 'error');
-      sendToSidebar('error', { message: `Save failed: ${err.message}` });
+
+      if (is409) {
+        exitEditMode();
+        sendToSidebar('syncError', {
+          userMessage: 'Out of sync. Re-syncing now...'
+        });
+        autoRecover();
+      } else if (isNetwork) {
+        sendToSidebar('error', {
+          userMessage: 'Network error. Check your connection and try saving again.',
+          recoverable: true
+        });
+      } else {
+        exitEditMode();
+        sendToSidebar('syncError', {
+          userMessage: 'Something went wrong. Re-syncing now...'
+        });
+        autoRecover();
+      }
     }
   }
+
+  // -------------------------------------------------------
+  // Auto-recovery: fetch fresh source after sync errors
+  // -------------------------------------------------------
+  async function autoRecover() {
+    try {
+      devSeparator();
+      devLog('Recovery', 'fetching latest from GitHub...', '', 'recovery-status');
+      const t0 = Date.now();
+      const result = await fetchFromGitHub();
+      const latency = Date.now() - t0;
+
+      const oldSHA = sourceSHA;
+      sourceContent = result.content;
+      sourceSHA = result.sha;
+      lastSaveData = { content: result.content, sha: result.sha };
+      lastSaveTime = Date.now();
+
+      devLog('Recovery', `synced in ${latency}ms`, 'success', 'recovery-status');
+      devLog('State', `\u2713 SHA updated: ${oldSHA ? oldSHA.substring(0, 7) : 'null'} \u2192 ${result.sha.substring(0, 7)}`, 'success', 'recovery-state');
+      sendToSidebar('recovered');
+    } catch (recoverErr) {
+      devLog('Recovery', `failed: ${recoverErr.message}`, 'error', 'recovery-status');
+      sendToSidebar('recoveryFailed', {
+        userMessage: 'Could not sync. Please reload the page.'
+      });
+    }
+  }
+
 
   // -------------------------------------------------------
   // HTML validation (quick structural check)
@@ -989,6 +1214,7 @@ Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers.
     document.designMode = 'off';
     document.documentElement.classList.remove('blip-editing');
     isEditing = false;
+    hasEdits = false;
     devLog('Mode', 'designMode OFF', '', 'edit-mode');
     mutations = [];
     mutatedParents.clear();
@@ -1004,6 +1230,55 @@ Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers.
     if (!currentHost.includes(BLIP_CONFIG.site.url)) return;
 
     injectSidebar();
+    resolveAndPrefetch();
+  }
+
+  async function resolveAndPrefetch() {
+    try {
+      // Step 1: Fetch repo file listing
+      const t0 = Date.now();
+      repoFiles = await listRepoFiles();
+      const listLatency = Date.now() - t0;
+
+      // Step 2: Filter to editable files
+      editableFiles = filterEditableFiles(repoFiles);
+
+      devLog('Repo files', `${repoFiles.length} total, ${editableFiles.length} editable`, 'success', 'repo-files');
+
+      // Step 3: Resolve current URL to a file path
+      resolvedFilePath = resolveFilePath(window.location.pathname, editableFiles);
+
+      if (!resolvedFilePath) {
+        devLog('File', `no match for "${window.location.pathname}"`, 'error', 'resolved-file');
+        sendToSidebar('fileInfo', {
+          resolvedFile: null,
+          editableFiles: editableFiles.map(f => f.name)
+        });
+        return;
+      }
+
+      devLog('File', resolvedFilePath, 'success', 'resolved-file');
+
+      // Send file info to sidebar for the indicator
+      sendToSidebar('fileInfo', {
+        resolvedFile: resolvedFilePath,
+        editableFiles: editableFiles.map(f => f.name)
+      });
+
+      // Step 4: Prefetch the resolved file
+      const t1 = Date.now();
+      const result = await fetchFromGitHub(resolvedFilePath);
+      const fetchLatency = Date.now() - t1;
+
+      sourceContent = result.content;
+      sourceSHA = result.sha;
+
+      devLog('Prefetch', `ready (${listLatency + fetchLatency}ms, ${result.size} bytes)`, 'success', 'prefetch-status');
+      devLog('File SHA', result.sha.substring(0, 7) + ' (baseline)', 'success', 'file-sha');
+
+    } catch (err) {
+      devLog('Init', `failed: ${err.message}`, 'error', 'prefetch-status');
+    }
   }
 
   if (document.readyState === 'loading') {

@@ -9,6 +9,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // keep channel open for async response
   }
 
+  if (message.type === 'GITHUB_LIST_FILES') {
+    githubListFiles(message.config)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (message.type === 'GITHUB_COMMIT') {
     githubCommitFile(message.config, message.content, message.sha)
       .then(result => sendResponse({ success: true, data: result }))
@@ -23,6 +30,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+async function githubListFiles(config) {
+  const { owner, repo, branch, token } = config;
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/?ref=${branch}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github.v3+json'
+    }
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`GitHub list failed (${response.status}): ${body}`);
+  }
+
+  const data = await response.json();
+  // Return only files (not directories), with name and path
+  return data
+    .filter(item => item.type === 'file')
+    .map(item => ({ name: item.name, path: item.path, size: item.size }));
+}
 
 async function githubFetchFile(config) {
   const { owner, repo, branch, filePath, token } = config;
