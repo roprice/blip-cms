@@ -52,14 +52,18 @@
 
     window.addEventListener('message', handleSidebarMessage);
 
-    // Start collapsed or expanded based on config
-    if (BLIP_CONFIG.sidebar.startCollapsed) {
-      collapseSidebar();
-    } else {
-      currentSidebarWidth = width;
-      document.documentElement.style.setProperty('--blip-sidebar-width', width + 'px');
-      document.documentElement.classList.add('blip-sidebar-open');
-    }
+    // Check stored sidebar state (with 30-min expiry), fallback to config default
+    getSidebarState().then((storedState) => {
+      if (storedState === 'expanded') {
+        expandSidebar();
+      } else if (storedState === 'collapsed') {
+        collapseSidebar();
+      } else if (BLIP_CONFIG.sidebar.startCollapsed) {
+        collapseSidebar();
+      } else {
+        expandSidebar();
+      }
+    });
   }
 
   function injectDragHandle(initialLeft) {
@@ -77,9 +81,88 @@
 
     collapsedTab = document.createElement('div');
     collapsedTab.id = 'blip-collapsed-tab';
-    collapsedTab.textContent = 'blip';
-    collapsedTab.addEventListener('click', expandSidebar);
+    collapsedTab.className = 'blip-tab-state-default';
+    collapsedTab.innerHTML = `
+      <span class="blip-tab-name">blip</span>
+      <span class="blip-tab-control blip-tab-show-default" data-action="startEdit">edit</span>
+      <span class="blip-tab-control blip-tab-show-editing" data-action="save">save</span>
+      <span class="blip-tab-control blip-tab-show-saving">saving\u2026</span>
+      <span class="blip-tab-control blip-tab-show-saved">saved!</span>
+      <span class="blip-tab-control blip-tab-show-error" data-action="startEdit">retry</span>
+      <span class="blip-tab-expand" data-action="expand" title="Open sidebar">\u203A\u203A</span>
+    `;
     document.documentElement.appendChild(collapsedTab);
+
+    // Hover expand/contract
+    collapsedTab.addEventListener('mouseenter', onTabMouseEnter);
+    collapsedTab.addEventListener('mouseleave', onTabMouseLeave);
+
+    // Click delegation
+    collapsedTab.addEventListener('click', onTabClick);
+  }
+
+  let tabContractTimer = null;
+
+  function onTabMouseEnter() {
+    if (tabContractTimer) {
+      clearTimeout(tabContractTimer);
+      tabContractTimer = null;
+    }
+    collapsedTab.classList.add('blip-tab-expanded');
+  }
+
+  function onTabMouseLeave() {
+    const state = getTabState();
+    // Stay expanded during active states
+    if (state === 'editing' || state === 'saving' || state === 'error') return;
+    if (state === 'saved') return; // will contract after saved timeout
+    collapsedTab.classList.remove('blip-tab-expanded');
+  }
+
+  function onTabClick(e) {
+    const action = e.target.dataset?.action;
+    if (!action) return;
+
+    if (action === 'expand') {
+      expandSidebar();
+      return;
+    }
+    if (action === 'startEdit') {
+      startEditSession();
+      return;
+    }
+    if (action === 'save') {
+      saveEdits();
+      return;
+    }
+  }
+
+  function getTabState() {
+    if (!collapsedTab) return 'default';
+    const classes = collapsedTab.className;
+    if (classes.includes('state-saving')) return 'saving';
+    if (classes.includes('state-saved')) return 'saved';
+    if (classes.includes('state-editing')) return 'editing';
+    if (classes.includes('state-error')) return 'error';
+    return 'default';
+  }
+
+  function setTabState(state) {
+    if (!collapsedTab) return;
+    collapsedTab.className = `blip-tab-state-${state}`;
+    // Keep expanded class if tab is hovered or in an active state
+    if (state === 'editing' || state === 'saving' || state === 'error') {
+      collapsedTab.classList.add('blip-tab-expanded');
+    }
+    if (state === 'saved') {
+      collapsedTab.classList.add('blip-tab-expanded');
+      // Contract after 1.5 seconds
+      tabContractTimer = setTimeout(() => {
+        setTabState('default');
+        collapsedTab.classList.remove('blip-tab-expanded');
+        tabContractTimer = null;
+      }, 1500);
+    }
   }
 
   function setSidebarWidth(w) {
@@ -107,6 +190,7 @@
     if (collapsedTab) {
       collapsedTab.style.display = 'block';
     }
+    saveSidebarState('collapsed');
   }
 
   function expandSidebar() {
@@ -125,6 +209,38 @@
     if (collapsedTab) {
       collapsedTab.style.display = 'none';
     }
+    saveSidebarState('expanded');
+  }
+
+  function saveSidebarState(state) {
+    try {
+      chrome.storage.local.set({
+        blipSidebarState: state,
+        blipSidebarTimestamp: Date.now()
+      });
+    } catch (e) { /* ignore storage errors */ }
+  }
+
+  async function getSidebarState() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(['blipSidebarState', 'blipSidebarTimestamp'], (result) => {
+          if (chrome.runtime.lastError || !result.blipSidebarState) {
+            resolve(null);
+            return;
+          }
+          // Expire after 30 minutes
+          const age = Date.now() - (result.blipSidebarTimestamp || 0);
+          if (age > 30 * 60 * 1000) {
+            resolve(null);
+            return;
+          }
+          resolve(result.blipSidebarState);
+        });
+      } catch (e) {
+        resolve(null);
+      }
+    });
   }
 
   function startDrag(e) {
@@ -768,6 +884,7 @@
 
       devLog('Mode', 'designMode ON', 'success', 'edit-mode');
       sendToSidebar('editStarted');
+      setTabState('editing');
 
     } catch (err) {
       devLog('Error', err.message, 'error');
@@ -775,6 +892,7 @@
         userMessage: 'Could not start editing. Try reloading the page.',
         recoverable: false
       });
+      setTabState('error');
     }
   }
 
@@ -784,6 +902,7 @@
   async function saveEdits() {
     if (!isEditing || !sourceContent || isSaving) return;
     isSaving = true;
+    setTabState('saving');
 
     try {
       // Flush pending observer records
@@ -1003,9 +1122,11 @@
       exitEditMode();
       isSaving = false;
       sendToSidebar('saved');
+      setTabState('saved');
 
     } catch (err) {
       isSaving = false;
+      setTabState('error');
       const errorTimestamp = new Date().toISOString().slice(11, 23);
 
       // Extract HTTP status if available
@@ -1177,6 +1298,7 @@ Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers.
 
     exitEditMode();
     sendToSidebar('cancelled');
+    setTabState('default');
   }
 
   // -------------------------------------------------------

@@ -14,17 +14,48 @@
     }
 
     :root {
-      --bg: #fafafa;
+      /* Provided base colors */
+      --bg: #eef3ed;
+      --border: #d1d5db;
+
+      /* Derived Palette */
       --surface: #ffffff;
-      --text: #1a1a1a;
-      --text-muted: #737373;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
-      --success: #22c55e;
-      --error: #ef4444;
-      --border: #e5e5e5;
-      --dev-bg: #f5f5f4;
-      --dev-text: #78716c;
+      --text: #2d362b;
+      --text-muted: #6b7a68;
+
+      /* Accent: Replacing the blue with a cohesive Forest Green */
+      --accent: #16a34a;
+      --accent-hover: #15803d;
+
+      /* Semantic: Muted tones to avoid "neon" clashing */
+      --success: #16a34a;
+      --error: #dc2626;
+
+      /* Utility */
+      --dev-bg: #f1f1f1;
+      --dev-text: #8a9987;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1f19;
+        --surface: #242b22;
+        --text: #e3ede2;
+        --text-muted: #a0b09d;
+
+        /* Accents are lightened for visibility against dark backgrounds */
+        --accent: #86b082;
+        --accent-hover: #a2c49f;
+
+        --success: #7cb56c;
+        --error: #e68585;
+
+        /* Borders are darkened to blend with the background */
+        --border: #343d32;
+
+        --dev-bg: #121511;
+        --dev-text: #687565;
+      }
     }
 
     body {
@@ -37,6 +68,9 @@
       overflow: hidden;
       font-size: 13px;
       line-height: 1.5;
+
+      border-right: 1px solid rgb(195 226 187);
+
     }
 
     /* Header */
@@ -404,8 +438,6 @@
       <button class="btn btn-primary" id="editBtn">Edit</button>
     </div>
 
-    <!-- File indicator -->
-    <div id="fileIndicator" class="file-indicator"></div>
 
     <!-- Editing state -->
     <div id="editingState" class="hidden">
@@ -424,6 +456,11 @@
         Saving...
       </div>
     </div>
+
+
+    <!-- File indicator -->
+    <div id="fileIndicator" class="file-indicator"></div>
+
 
     <!-- Notifications area -->
     <div id="notifications"></div>
