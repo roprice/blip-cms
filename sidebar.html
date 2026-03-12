@@ -5,6 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="sidebar.css">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0">
 </head>
 
 <body>
@@ -28,7 +30,7 @@
   <!-- EXPANDED VIEW -->
   <div id="expandedView" class="expanded-view hidden">
     <div class="header">
-      <div class="logo">blip</div>
+      <div class="logo">blip<span class="url-part">cms.com</span></div>
       <button class="close-btn" id="closeBtn" title="Close sidebar">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
           stroke-linecap="round">
@@ -39,31 +41,65 @@
     </div>
 
     <div class="content">
+      <!-- Default state: just the Edit button -->
       <div id="defaultState">
         <button class="btn btn-primary" id="editBtn">Edit</button>
       </div>
+
+      <!-- Editing state: status + save/cancel + save-to option -->
       <div id="editingState" class="hidden">
-        <div class="status-badge editing">
-          <span class="status-dot"></span>
-          Editing
+        <div class="editing-controls">
+          <div class="status-badge editing">
+            <span class="status-dot"></span>
+            Editing
+          </div>
+          <button class="btn btn-save" id="saveBtn">Save</button>
+          <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
         </div>
-        <button class="btn btn-save" id="saveBtn">Save</button>
-        <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
+
+        <!-- Save-to-repo checkbox (shown when site is connected) -->
+        <div id="saveToRepo" class="save-to-repo hidden">
+          <label class="save-to-label">
+            <input type="checkbox" id="saveToCheckbox" checked>
+            <span>Save to <strong id="saveToSiteName"></strong></span>
+          </label>
+        </div>
+
+        <!-- CTA message (shown when site is NOT connected) -->
+        <div id="saveToPrompt" class="save-to-prompt hidden">
+          <p>Want to save your edits directly to <strong id="promptSiteName"></strong>?</p>
+        </div>
       </div>
+
+      <!-- Saving state -->
       <div id="savingState" class="hidden">
         <div class="status-badge saving">
           <span class="status-dot"></span>
           Saving...
         </div>
       </div>
+
+      <!-- Notifications -->
       <div id="notifications"></div>
+
+      <!-- Your edits: diff accumulator (always visible) -->
+      <div id="siteEdits" class="site-edits">
+        <div class="site-edits-header">
+          <span class="site-edits-label">your edits</span>
+          <span class="material-symbols-outlined site-edits-copy" id="copyEditsBtn"
+            title="Copy to clipboard">content_copy</span>
+        </div>
+        <textarea id="editsTextarea" readonly placeholder="Your edits will appear here as you save changes."></textarea>
+      </div>
+
+      <!-- File list: sites and their files -->
       <div id="fileList" class="file-list"></div>
     </div>
 
     <!-- Config panel -->
     <div class="config-panel collapsed" id="configPanel">
       <div class="config-header">
-        <span class="config-label">Settings</span>
+        <span class="config-label">Manage sites</span>
         <button class="config-toggle" id="configToggle" title="Collapse/expand">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"
             stroke-linecap="round" stroke-linejoin="round">

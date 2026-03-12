@@ -5,11 +5,15 @@
 
 ## Purpose
 
-Blip is a Chrome extension that enables true edit-in-place editing for flat-file websites. It lets you edit your live website directly in the browser and commit changes to GitHub without ever leaving the page.
+Blip is a Chrome extension for editing website content in place, directly on the live page.
+
+For **pro users** with GitHub-connected sites, Blip lets you edit your live website and commit changes without ever leaving the page.
+
+For **everyone else**, Blip lets you activate designMode on any webpage, make edits, and save a structured before/after diff to the sidebar. These diffs can be copied, shared, or (in a future version) emailed directly from Blip. No GitHub account required.
 
 Blip exists because the current workflow for making small edits to a static website is absurdly friction-heavy: open VS Code, find the file, find the line, make the edit, save, commit, push, wait for deploy, check the live site. This kills flow state and discourages the kind of rapid, iterative refinement that makes websites great.
 
-With Blip, you visit your site, click edit, make your change, click save. Done.
+With Blip, you visit your site, click edit, make your change, click save. Done. Or, if it's not your site, you capture the diff and share it with whoever owns it.
 
 ## Philosophy
 
@@ -69,9 +73,10 @@ React, Next.js, Vue, Svelte, and similar component-based frameworks are explicit
 - `content.js` - injected into matched pages; manages the iframe, edit session, design mode, DOM observation, multi-file resolution
 - `content.css` - injected into matched pages; iframe positioning and page margin shift
 - `config.js` - injected into matched pages; all configuration (GitHub, file resolution, sidebar, LLM, observer settings)
+- `edit-history.js` - injected into matched pages; diff formatting and accumulation for the "your edits" textarea
 - `background.js` - service worker; handles GitHub API communication (fetch, commit, file listing) and LLM repair calls
 - `sidebar.html` - the sidebar UI (loaded inside the injected iframe); contains both collapsed tab widget and expanded sidebar views
-- `sidebar.js` - sidebar logic; view toggling, tab state, file list, dev panel
+- `sidebar.js` - sidebar logic; view toggling, tab state, file list, dev panel, edit history display
 
 ### Sidebar
 
@@ -100,12 +105,21 @@ This architecture solves a critical problem: `document.designMode = 'on'` on the
 **State persistence:** The sidebar's collapsed/expanded state is persisted to `chrome.storage.local` with a 30-minute expiry. Within that window, navigating between pages preserves the sidebar state. After 30 minutes of inactivity, the sidebar reverts to the default (collapsed).
 
 ## User onboarding experience
+
+### Freemium (default)
 1. User installs Blip.
-2. User "adds a site" by entering a URL and GitHub repo configuration.
-3. User visits a configured site and sees the floating tab widget's "edit" button
+2. User visits any website. The sidebar appears with Edit, the "your edits" textarea, and a prompt to connect a GitHub repo.
+3. User can immediately edit and capture diffs on any site.
+
+### Pro
+1. User opens the sidebar and "adds a site" in Manage Sites by entering a URL and GitHub repo configuration.
+2. User visits a configured site. The file list shows with a `sync` icon confirming the connection.
+3. Saves commit directly to GitHub. The "save to repo" checkbox defaults to checked.
 
 
 ## Core editing mechanism
+
+### Pro mode (GitHub-connected sites)
 
 1. User visits a configured site.
 2. Blip injects the sidebar iframe and fetches the repo file listing from GitHub to resolve which file corresponds to the current URL.
@@ -119,13 +133,29 @@ This architecture solves a critical problem: `document.designMode = 'on'` on the
 10. User edits content directly on the page.
 11. User clicks "Save."
 12. Blip collects observed mutations and applies targeted replacements: character-offset replacements for simple text nodes, innerHTML comparison for mixed-content parents.
-13. If LLM is enabled and structural validation detects corruption, Blip calls Groq for syntax repair.
-14. Blip commits the modified file to GitHub via the Contents API using the prefetched SHA.
-15. GitHub returns a response containing the new SHA.
-16. Blip updates the local SHA immediately, priming the system for the next edit. **[Dev notification: transaction log with timestamps, payload SHA, response status, returned SHA, state confirmation.]**
-17. The commit triggers the existing deployment pipeline (Netlify, Vercel, etc.).
-18. User sees "Saved" confirmation.
-19. UI returns to default state.
+13. Blip generates a structured before/after diff entry and appends it to the "your edits" textarea in the sidebar.
+14. If the "save to repo" checkbox is checked (default for connected sites), Blip commits the modified file to GitHub via the Contents API using the prefetched SHA.
+15. If LLM is enabled and structural validation detects corruption, Blip calls Groq for syntax repair before committing.
+16. GitHub returns a response containing the new SHA.
+17. Blip updates the local SHA immediately, priming the system for the next edit. **[Dev notification: transaction log with timestamps, payload SHA, response status, returned SHA, state confirmation.]**
+18. The commit triggers the existing deployment pipeline (Netlify, Vercel, etc.).
+19. User sees "Saved" confirmation.
+20. UI returns to default state.
+
+### Freemium mode (any website, no GitHub required)
+
+1. User visits any website (Blip runs on all URLs via `<all_urls>` manifest match).
+2. Blip injects the sidebar iframe. No GitHub fetch occurs.
+3. User clicks "Edit."
+4. Blip captures the live DOM's `outerHTML` as the local baseline for diffing.
+5. Blip walks the live DOM and builds the same dual-track text node map against the local baseline.
+6. `document.designMode` is enabled. User edits content directly.
+7. User clicks "Save."
+8. Blip generates a structured before/after diff and appends it to the "your edits" textarea.
+9. No GitHub commit occurs. The diff is the deliverable.
+10. User can copy the accumulated diffs via the copy button, or (future) email them.
+
+The sidebar shows a prompt encouraging unconnected users to link their site to a GitHub repo for direct saving.
 
 ### Diff strategy: dual-track mapping
 
@@ -251,15 +281,17 @@ The sidebar is fixed at 300px wide. It is injected as an iframe on the left side
 - Header: Blip logo/wordmark + close element (always visible)
 - Primary action: Edit button (large, prominent)
 - Notifications area
-- File list: all editable files, active file highlighted with green dot, others muted
+- Your edits: diff accumulator textarea with copy button (always visible, shows placeholder when empty)
+- File list: collapsible site groups with connection status icons (`sync`/`sync_disabled`), active file highlighted with green dot
 - Dev info area (alpha only): SHA, parse status, diagnostic details
 
 **Editing state** (top to bottom):
 
 - Header: Blip logo/wordmark + close element
-- Status indicator: "Editing" label (green accent badge with pulsing dot)
-- Action buttons: Save button, Cancel button
+- Status indicator: "Editing" label (green accent badge with pulsing dot), inline with Save and Cancel buttons
+- Save-to-repo checkbox (shown for connected sites, checked by default) OR prompt to connect (shown for unconnected sites)
 - Notifications area
+- Your edits textarea
 - File list
 - Dev info area (alpha only): mutation count, tracked changes summary
 
@@ -268,6 +300,7 @@ The sidebar is fixed at 300px wide. It is injected as an iframe on the left side
 - Header: Blip logo/wordmark + close element
 - Confirmation: "Saved" notification (auto-dismisses after 4 seconds)
 - Primary action: Edit button returns
+- Your edits textarea (now containing the diff entry from the save)
 - File list
 - Dev info area (alpha only): transaction log with new SHA
 
@@ -328,6 +361,8 @@ This pattern is well-established among Chrome extensions. No full web applicatio
 
 ## Use cases
 
+### Pro (GitHub-connected)
+
 Blip is for quick, reactive edits:
 
 - Fix a typo or grammatical error
@@ -339,6 +374,15 @@ Blip is for quick, reactive edits:
 - Fix something urgently from anywhere you have a browser
 - Any edit driven by urgency, inspiration, or real-world context that would lose momentum if routed through a code editor
 
+### Freemium (any website)
+
+- Suggest copy edits to a colleague's website and email them the diff
+- Audit a client's site and capture all proposed text changes in one session
+- Save a before/after record of edits you want to make to your own site later
+- Review a staging site and batch your feedback as structured diffs rather than screenshots
+
+### Out of scope
+
 Blip is not for:
 
 - Writing new blog posts or long-form content
@@ -349,10 +393,13 @@ Blip is not for:
 
 ## Future considerations (out of scope for alpha)
 
+- Writing new pages blog posts, landing pages, or long-form content, using a templating system
+- AI-assisted page creation from templates
+- Inserting SEO meta tags, titles, and descriptions, optionally using AI
+- Email diffs directly from Blip (branded email from a Blip domain)
 - CSS editing support
 - Mobile editing (bookmarklet or PWA approach, since Chrome extensions don't run on mobile)
 - Visual diff preview before committing
-- Edit history panel in the sidebar
 - Collaborative editing (multiple users editing the same site)
 - Support for non-GitHub hosts (GitLab, Bitbucket)
 - Image replacement via drag-and-drop
@@ -360,4 +407,3 @@ Blip is not for:
 - Auto-commit message customization
 - Keyboard shortcuts (Ctrl+S to save, Esc to cancel)
 - Sidebar width resizing (drag handle, currently hardcoded at 300px)
-- AI-assisted page creation from templates

@@ -90,9 +90,7 @@ async function githubCommitFile(config, newContent, sha) {
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
 
   // Encode content to base64 (UTF-8 safe)
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(newContent);
-  const base64 = btoa(String.fromCharCode(...bytes));
+  const base64 = btoa(unescape(encodeURIComponent(newContent)));
 
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const commitMessage = `Blip edit: ${timestamp}`;

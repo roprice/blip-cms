@@ -121,7 +121,7 @@ function handleSidebarMessage(event) {
   switch (msg.action) {
     case 'ready': sendInitialDevLogs(); break;
     case 'startEdit': startEditSession(); break;
-    case 'save': saveEdits(); break;
+    case 'save': saveEdits(msg.commitToRepo !== false && !!resolvedFilePath); break;
     case 'cancel': cancelEdits(); break;
     case 'closeSidebar': cancelEdits(); collapseSidebar(); break;
     case 'expandSidebar': expandSidebar(); break;
@@ -147,7 +147,8 @@ function sendInitialDevLogs() {
     sendToSidebar('fileInfo', {
       resolvedFile: resolvedFilePath,
       editableFiles: editableFiles.map(f => f.name),
-      siteUrl: githubConfig ? githubConfig.siteUrl : null
+      siteUrl: githubConfig ? githubConfig.siteUrl : null,
+      connected: !!resolvedFilePath
     });
   }
 }
@@ -234,17 +235,14 @@ async function startEditSession() {
   try {
     devSeparator();
 
-    if (!resolvedFilePath) {
-      sendToSidebar('error', {
-        userMessage: 'No editable file found for this page. Did you configure your GitHub settings?',
-        recoverable: false
-      });
-      return;
-    }
 
     const withinGracePeriod = lastSaveData && (Date.now() - lastSaveTime < SAVE_GRACE_MS);
 
-    if (withinGracePeriod) {
+    if (!resolvedFilePath) {
+      sourceContent = document.documentElement.outerHTML;
+      sourceSHA = 'local-only';
+      devLog('Source', 'using local DOM (freemium mode)', 'success', 'source-status');
+    } else if (withinGracePeriod) {
       sourceContent = lastSaveData.content;
       sourceSHA = lastSaveData.sha;
       devLog('Source', `using cached version (saved ${Math.round((Date.now() - lastSaveTime) / 1000)}s ago)`, 'success', 'source-status');
@@ -289,7 +287,7 @@ async function startEditSession() {
 // -------------------------------------------------------
 // Save
 // -------------------------------------------------------
-async function saveEdits() {
+async function saveEdits(commitToRepo = true) {
   if (!isEditing || !sourceContent || isSaving) return;
   isSaving = true;
   sendToSidebar('tabState', { state: 'saving' });
@@ -395,11 +393,23 @@ async function saveEdits() {
       }
     }
 
+    // ---- Generate diff entry and send to sidebar ----
+    const diffSnippets = buildDiffSnippets(sourceContent, allReplacements);
+    const diffText = formatDiffEntry(
+      window.location.href,
+      resolvedFilePath || 'unknown',
+      diffSnippets
+    );
+    sendToSidebar('diffEntry', { diffText });
+    devLog('Diff', `${diffSnippets.length} snippet(s) captured`, 'success');
+
+    // ---- Apply replacements to source content ----
     let newContent = sourceContent;
     for (const rep of allReplacements) {
       newContent = newContent.substring(0, rep.sourceOffset) + rep.replacement + newContent.substring(rep.sourceOffset + rep.sourceLength);
     }
 
+    // ---- LLM safety net (if enabled) ----
     let usedLLM = false;
     if (parentLevelChanges.length > 0 && BLIP_CONFIG.llm && BLIP_CONFIG.llm.enabled) {
       const validation = validateHTML(newContent);
@@ -415,38 +425,47 @@ async function saveEdits() {
       }
     }
 
-    const txId = Date.now();
-    const pushTimestamp = new Date().toISOString().slice(11, 23);
-    devSeparator();
-    devLog('TX', `#${txId} push initiated at ${pushTimestamp}`, '', 'tx-start');
-    devLog('Payload SHA', sourceSHA.substring(0, 7) + ' (sent to GitHub)', '', 'tx-payload-sha');
-    devLog('Commit', 'pushing to GitHub...', '', 'commit-status');
+    // ---- Commit to GitHub (only if commitToRepo is true) ----
+    if (commitToRepo) {
+      const txId = Date.now();
+      const pushTimestamp = new Date().toISOString().slice(11, 23);
+      devSeparator();
+      devLog('TX', `#${txId} push initiated at ${pushTimestamp}`, '', 'tx-start');
+      devLog('Payload SHA', sourceSHA.substring(0, 7) + ' (sent to GitHub)', '', 'tx-payload-sha');
+      devLog('Commit', 'pushing to GitHub...', '', 'commit-status');
 
-    const t0 = Date.now();
-    const result = await commitToGitHub(newContent, sourceSHA);
-    const latency = Date.now() - t0;
+      const t0 = Date.now();
+      const result = await commitToGitHub(newContent, sourceSHA);
+      const latency = Date.now() - t0;
 
-    const responseTimestamp = new Date().toISOString().slice(11, 23);
-    devLog('TX', `#${txId} response at ${responseTimestamp} (${latency}ms)`, 'success', 'tx-response');
-    devLog('HTTP', '200 OK', 'success', 'tx-http');
-    devLog('Returned SHA', result.sha.substring(0, 7) + ' (from server)', 'success', 'tx-returned-sha');
+      const responseTimestamp = new Date().toISOString().slice(11, 23);
+      devLog('TX', `#${txId} response at ${responseTimestamp} (${latency}ms)`, 'success', 'tx-response');
+      devLog('HTTP', '200 OK', 'success', 'tx-http');
+      devLog('Returned SHA', result.sha.substring(0, 7) + ' (from server)', 'success', 'tx-returned-sha');
 
-    const oldSHA = sourceSHA;
-    sourceSHA = result.sha;
-    sourceContent = newContent;
-    lastSaveTime = Date.now();
-    lastSaveData = { content: newContent, sha: result.sha };
+      const oldSHA = sourceSHA;
+      sourceSHA = result.sha;
+      sourceContent = newContent;
+      lastSaveTime = Date.now();
+      lastSaveData = { content: newContent, sha: result.sha };
 
-    const stateUpdated = sourceSHA === result.sha;
-    devLog('State',
-      stateUpdated
-        ? `\u2713 local SHA updated: ${oldSHA.substring(0, 7)} \u2192 ${sourceSHA.substring(0, 7)}`
-        : `\u2717 SHA mismatch! local=${sourceSHA.substring(0, 7)} server=${result.sha.substring(0, 7)}`,
-      stateUpdated ? 'success' : 'error', 'tx-state'
-    );
-    devLog('Commit', result.commitSha.substring(0, 7) + (usedLLM ? ' (LLM-repaired)' : ''), 'success', 'commit-status');
+      const stateUpdated = sourceSHA === result.sha;
+      devLog('State',
+        stateUpdated
+          ? `\u2713 local SHA updated: ${oldSHA.substring(0, 7)} \u2192 ${sourceSHA.substring(0, 7)}`
+          : `\u2717 SHA mismatch! local=${sourceSHA.substring(0, 7)} server=${result.sha.substring(0, 7)}`,
+        stateUpdated ? 'success' : 'error', 'tx-state'
+      );
+      devLog('Commit', result.commitSha.substring(0, 7) + (usedLLM ? ' (LLM-repaired)' : ''), 'success', 'commit-status');
 
-    buildTextNodeMap(document.body, sourceContent, true);
+      buildTextNodeMap(document.body, sourceContent, true);
+    } else {
+      // Diff-only save: update source content locally but don't push
+      sourceContent = newContent;
+      devLog('Save', 'diff captured (no GitHub commit)', 'success');
+      buildTextNodeMap(document.body, sourceContent, true);
+    }
+
     exitEditMode();
     isSaving = false;
     sendToSidebar('saved');
@@ -590,7 +609,8 @@ async function resolveAndPrefetch() {
       sendToSidebar('fileInfo', {
         resolvedFile: null,
         editableFiles: editableFiles.map(f => f.name),
-        siteUrl: githubConfig.siteUrl
+        siteUrl: githubConfig.siteUrl,
+        connected: false
       });
       return;
     }
@@ -599,7 +619,8 @@ async function resolveAndPrefetch() {
     sendToSidebar('fileInfo', {
       resolvedFile: resolvedFilePath,
       editableFiles: editableFiles.map(f => f.name),
-      siteUrl: githubConfig.siteUrl
+      siteUrl: githubConfig.siteUrl,
+      connected: true
     });
 
     const t1 = Date.now();

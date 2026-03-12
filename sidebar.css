@@ -245,6 +245,11 @@
         color: var(--text);
     }
 
+    .url-part {
+        color: var(--text-muted);
+        opacity: .6;
+    }
+
     .close-btn {
         background: none;
         border: none;
@@ -430,6 +435,140 @@
         }
     }
 
+    /* ===================== EDITING CONTROLS ===================== */
+    .editing-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .editing-controls .status-badge {
+        margin-right: auto;
+    }
+
+    .editing-controls .btn-save,
+    .editing-controls .btn-cancel {
+        width: auto;
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+
+    /* ===================== SAVE-TO SECTION ===================== */
+    .save-to-repo {
+        padding: 2px 0 4px;
+    }
+
+    .save-to-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text);
+        cursor: pointer;
+    }
+
+    .save-to-label input[type="checkbox"] {
+        accent-color: var(--accent);
+        width: 14px;
+        height: 14px;
+        margin: 0;
+        cursor: pointer;
+    }
+
+    .save-to-label strong {
+        font-weight: 600;
+    }
+
+    .save-to-prompt {
+        padding: 4px 0 8px;
+    }
+
+    .save-to-prompt p {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.5;
+    }
+
+    .save-to-prompt strong {
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    /* ===================== SITE EDITS (YOUR EDITS) ===================== */
+    .site-edits {
+        position: relative;
+    }
+
+    .site-edits-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 0 4px;
+    }
+
+    .site-edits-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: 0.02em;
+    }
+
+    .site-edits-copy {
+        font-size: 17px !important;
+        color: var(--text-muted);
+        cursor: pointer;
+        opacity: 0.6;
+        transition: opacity 0.15s, color 0.15s;
+        user-select: none;
+        position: absolute;
+        right: 0;
+        top: 2px;
+    }
+
+    .site-edits-copy:hover {
+        opacity: 1;
+        color: var(--accent);
+    }
+
+    .site-edits-copy.copied {
+        color: var(--accent);
+        opacity: 1;
+    }
+
+    .site-edits textarea {
+        width: 100%;
+        padding: 8px 10px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        line-height: 1.6;
+        color: var(--text);
+        background: #d7ded6;
+        border: 1px solid #d7ded6;
+        border-radius: 6px;
+        resize: vertical;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+
+    .site-edits textarea:focus {
+        border-color: var(--accent);
+    }
+
+    .site-edits textarea::placeholder {
+        color: var(--text-muted);
+        font-family: 'DM Sans', sans-serif;
+        font-size: 11px;
+    }
+
+    /* Empty state: smaller textarea */
+    .site-edits textarea:placeholder-shown {
+        min-height: 80px;
+    }
+
+
+
+
     /* File list */
     .file-list {
         display: flex;
@@ -438,14 +577,75 @@
         padding-top: 4px;
     }
 
+    /* Collapsible site groups */
+    .file-website {
+        margin-bottom: 16px;
+    }
+
     .file-site-header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
         font-size: 12px;
         font-weight: 600;
         text-transform: lowercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.02em;
         color: var(--text-muted);
-        padding: 4px 10px 2px;
+        padding: 4px 16px 2px;
         margin-top: 4px;
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.15s;
+    }
+
+    .file-site-header:hover {
+        color: var(--text);
+    }
+
+    /* Connection status icon next to site name */
+    .file-site-header .connection-status {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 2px;
+    }
+
+    .file-site-header .connection-status .material-symbols-outlined {
+        font-size: 13px;
+        color: var(--text-muted);
+        opacity: 0.7;
+    }
+
+    /* Connected site: green icon */
+    .file-website.connected .connection-status .material-symbols-outlined {
+        color: var(--accent);
+        opacity: 0.8;
+    }
+
+    /* Disconnected/error site: muted icon */
+    .file-website.disconnected .connection-status .material-symbols-outlined {
+        color: var(--text-muted);
+        opacity: 0.5;
+    }
+
+    /* Collapse toggle chevron */
+    .file-site-header .site-toggle {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        transition: transform 0.2s ease;
+    }
+
+    .file-site-header .site-toggle svg {
+        transition: transform 0.2s ease;
+    }
+
+    .file-website.collapsed .site-toggle svg {
+        transform: rotate(-90deg);
+    }
+
+    /* File items inside a collapsed site group are hidden */
+    .file-website.collapsed .file-items {
+        display: none;
     }
 
     .file-item {

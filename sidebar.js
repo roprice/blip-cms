@@ -25,6 +25,18 @@ const siteForm = document.getElementById('siteForm');
 const cancelAddSite = document.getElementById('cancelAddSite');
 const savedSitesList = document.getElementById('savedSitesList');
 
+// Save-to and edit history elements
+const saveToRepo = document.getElementById('saveToRepo');
+const saveToCheckbox = document.getElementById('saveToCheckbox');
+const saveToSiteName = document.getElementById('saveToSiteName');
+const saveToPrompt = document.getElementById('saveToPrompt');
+const promptSiteName = document.getElementById('promptSiteName');
+const editsTextarea = document.getElementById('editsTextarea');
+const copyEditsBtn = document.getElementById('copyEditsBtn');
+
+// Track whether current site has a working repo connection
+let siteConnected = false;
+
 // -------------------------------------------------------
 // View elements
 // -------------------------------------------------------
@@ -63,7 +75,9 @@ editBtn.addEventListener('click', () => {
 
 saveBtn.addEventListener('click', () => {
     showSaving();
-    sendToContent('save');
+    // Tell content.js whether to commit to GitHub or just capture the diff
+    const commitToRepo = siteConnected && saveToCheckbox.checked;
+    sendToContent('save', { commitToRepo });
 });
 
 cancelBtn.addEventListener('click', () => {
@@ -80,6 +94,61 @@ devToggle.addEventListener('click', () => {
 
 configToggle.addEventListener('click', () => {
     configPanel.classList.toggle('collapsed');
+});
+
+// -------------------------------------------------------
+// Edit history: copy button
+// -------------------------------------------------------
+copyEditsBtn.addEventListener('click', () => {
+    const text = editsTextarea.value;
+    if (!text) return;
+
+    navigator.clipboard.writeText(text).then(() => {
+        // Brief visual feedback
+        copyEditsBtn.textContent = 'check';
+        copyEditsBtn.classList.add('copied');
+        setTimeout(() => {
+            copyEditsBtn.textContent = 'content_copy';
+            copyEditsBtn.classList.remove('copied');
+        }, 1500);
+    }).catch(() => {
+        // Fallback: select the textarea for manual copy
+        editsTextarea.select();
+    });
+});
+
+// -------------------------------------------------------
+// Edit history: append a diff entry to the textarea
+// -------------------------------------------------------
+// -------------------------------------------------------
+// Edit history: prepend a diff entry to the textarea
+// -------------------------------------------------------
+function appendDiffEntry(diffText) {
+    const current = editsTextarea.value;
+
+    // Prepend the new text so the latest edit is at the top
+    if (current) {
+        editsTextarea.value = diffText + '\n\n' + current;
+    } else {
+        editsTextarea.value = diffText;
+    }
+
+    // Auto-expand height up to 500px maximum
+    editsTextarea.style.height = 'auto'; // Reset to calculate true scrollHeight
+    editsTextarea.style.height = Math.min(editsTextarea.scrollHeight, 500) + 'px';
+
+    // Auto-scroll to top
+    editsTextarea.scrollTop = 0;
+}
+
+// -------------------------------------------------------
+// Collapsible file site groups: delegated click handler
+// -------------------------------------------------------
+fileList.addEventListener('click', (e) => {
+    const header = e.target.closest('.file-site-header');
+    if (!header) return;
+    const website = header.closest('.file-website');
+    if (website) website.classList.toggle('collapsed');
 });
 
 // -------------------------------------------------------
@@ -206,6 +275,19 @@ function showEditing() {
     editBtn.disabled = false;
     editBtn.textContent = 'Edit';
     clearNotifications();
+
+    // Show appropriate save-to section based on connection status
+    if (siteConnected) {
+        saveToRepo.classList.remove('hidden');
+        saveToPrompt.classList.add('hidden');
+    } else if (currentSiteUrl) {
+        saveToRepo.classList.add('hidden');
+        saveToPrompt.classList.remove('hidden');
+        promptSiteName.textContent = currentSiteUrl;
+    } else {
+        saveToRepo.classList.add('hidden');
+        saveToPrompt.classList.add('hidden');
+    }
 }
 
 function showSaving() {
@@ -220,6 +302,9 @@ function showDefault() {
     defaultState.classList.remove('hidden');
     editBtn.disabled = false;
     editBtn.textContent = 'Edit';
+    // Hide save-to sections when not editing
+    saveToRepo.classList.add('hidden');
+    saveToPrompt.classList.add('hidden');
 }
 
 function showSyncing(message) {
@@ -266,33 +351,82 @@ function escapeHtml(str) {
 }
 
 // -------------------------------------------------------
-// File list (with site name header)
+// File list: collapsible site groups with connection icons
 // -------------------------------------------------------
 let currentSiteUrl = null;
 
-function updateFileList(resolvedFile, editableFiles, siteUrl) {
+// Store all known sites and their file lists for multi-site display
+let knownSites = {};
+
+function updateFileList(resolvedFile, editableFiles, siteUrl, connected) {
     if (!fileList || !editableFiles) return;
     if (siteUrl) currentSiteUrl = siteUrl;
 
-    const sorted = [...editableFiles].sort((a, b) => a.localeCompare(b));
+    // Track connection status for the save-to checkbox
+    if (connected !== undefined) siteConnected = connected;
 
-    const header = currentSiteUrl
-        ? `<div class="file-site-header">${escapeHtml(currentSiteUrl)}</div>`
-        : '';
+    // Update save-to site name
+    if (siteConnected && currentSiteUrl) {
+        saveToSiteName.textContent = currentSiteUrl;
+    }
 
-    fileList.innerHTML = header + sorted.map(fileName => {
-        const isActive = fileName === resolvedFile;
-        return `<div class="file-item ${isActive ? 'active' : ''}">
-      <span class="file-dot"></span>
-      <span class="file-name">${escapeHtml(fileName)}</span>
-    </div>`;
-    }).join('');
+    // Store this site's file list
+    if (siteUrl) {
+        knownSites[siteUrl] = {
+            files: editableFiles,
+            resolvedFile: resolvedFile,
+            connected: connected !== false
+        };
+    }
 
+    // Render all known sites
+    renderAllSites();
+
+    // Enable/disable edit button based on resolved file
     if (!resolvedFile) {
         editBtn.disabled = true;
     } else {
         editBtn.disabled = false;
     }
+}
+
+function renderAllSites() {
+    let html = '';
+
+    for (const [siteUrl, siteData] of Object.entries(knownSites)) {
+        const sorted = [...siteData.files].sort((a, b) => a.localeCompare(b));
+        const isConnected = siteData.connected;
+        const connectionClass = isConnected ? 'connected' : 'disconnected';
+        const connectionIcon = isConnected ? 'sync' : 'sync_disabled';
+
+        // Chevron SVG for collapse toggle
+        const chevron = `<span class="site-toggle">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" 
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2,3 5,7 8,3"/>
+            </svg>
+        </span>`;
+
+        html += `<div class="file-website ${connectionClass}">`;
+        html += `<div class="file-site-header">
+            ${escapeHtml(siteUrl)}
+            <span class="connection-status"><span class="material-symbols-outlined">${connectionIcon}</span></span>
+            ${chevron}
+        </div>`;
+        html += `<div class="file-items">`;
+
+        for (const fileName of sorted) {
+            const isActive = fileName === siteData.resolvedFile;
+            html += `<div class="file-item ${isActive ? 'active' : ''}">
+                <span class="file-dot"></span>
+                <span class="file-name">${escapeHtml(fileName)}</span>
+            </div>`;
+        }
+
+        html += `</div></div>`;
+    }
+
+    fileList.innerHTML = html;
 }
 
 // -------------------------------------------------------
@@ -377,12 +511,19 @@ window.addEventListener('message', (event) => {
             }
             break;
         case 'fileInfo':
-            updateFileList(msg.resolvedFile, msg.editableFiles, msg.siteUrl);
+            // connected flag: true if repo is reachable and file resolved
+            updateFileList(msg.resolvedFile, msg.editableFiles, msg.siteUrl, msg.connected);
             break;
         case 'noSiteConfig':
             editBtn.disabled = true;
+            siteConnected = false;
+            currentSiteUrl = window.location ? window.location.hostname : null;
             fileList.innerHTML = '<p class="file-list-hint">Connect a GitHub repo in Settings to enable saving.</p>';
             configPanel.classList.remove('collapsed');
+            break;
+        case 'diffEntry':
+            // Append formatted diff text to the edits textarea
+            appendDiffEntry(msg.diffText);
             break;
         case 'devLog':
             devLogEntry(msg.label, msg.value, msg.status || '', msg.entryId || null);
