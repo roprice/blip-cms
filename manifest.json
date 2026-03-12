@@ -18,6 +18,10 @@
       ],
       "js": [
         "config.js",
+        "github.js",
+        "file-resolver.js",
+        "mapping.js",
+        "llm.js",
         "content.js"
       ],
       "css": [
