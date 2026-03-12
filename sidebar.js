@@ -117,28 +117,27 @@ copyEditsBtn.addEventListener('click', () => {
     });
 });
 
-// -------------------------------------------------------
-// Edit history: append a diff entry to the textarea
-// -------------------------------------------------------
+
 // -------------------------------------------------------
 // Edit history: prepend a diff entry to the textarea
 // -------------------------------------------------------
 function appendDiffEntry(diffText) {
     const current = editsTextarea.value;
 
-    // Prepend the new text so the latest edit is at the top
+    // Prepend the new text
     if (current) {
         editsTextarea.value = diffText + '\n\n' + current;
     } else {
         editsTextarea.value = diffText;
     }
 
-    // Auto-expand height up to 500px maximum
-    editsTextarea.style.height = 'auto'; // Reset to calculate true scrollHeight
+    // Auto-expand and scroll
+    editsTextarea.style.height = 'auto';
     editsTextarea.style.height = Math.min(editsTextarea.scrollHeight, 500) + 'px';
-
-    // Auto-scroll to top
     editsTextarea.scrollTop = 0;
+
+    // Save to local storage
+    chrome.storage.local.set({ blipEditHistory: editsTextarea.value });
 }
 
 // -------------------------------------------------------
@@ -536,6 +535,30 @@ window.addEventListener('message', (event) => {
 
 // Init: load saved sites into config panel
 renderSavedSites();
+
+// Load persisted edit history
+chrome.storage.local.get(['blipEditHistory'], (result) => {
+    if (result.blipEditHistory) {
+        editsTextarea.value = result.blipEditHistory;
+
+        // Wait a tick for the DOM to paint before calculating scrollHeight
+        setTimeout(() => {
+            editsTextarea.style.height = 'auto';
+            editsTextarea.style.height = Math.min(editsTextarea.scrollHeight, 500) + 'px';
+            editsTextarea.scrollTop = 0;
+        }, 50);
+    }
+});
+
+
+const clearHistoryBtn = document.getElementById('clear-history-btn');
+if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', () => {
+        editsTextarea.value = '';
+        editsTextarea.style.height = 'auto';
+        chrome.storage.local.remove('blipEditHistory');
+    });
+}
 
 // Tell the content script we're ready
 sendToContent('ready');

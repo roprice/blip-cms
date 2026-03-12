@@ -498,6 +498,7 @@
     /* ===================== SITE EDITS (YOUR EDITS) ===================== */
     .site-edits {
         position: relative;
+        padding-bottom: 20px;
     }
 
     .site-edits-header {
@@ -524,6 +525,7 @@
         position: absolute;
         right: 0;
         top: 2px;
+        padding: 0 4px !important;
     }
 
     .site-edits-copy:hover {
@@ -549,6 +551,23 @@
         resize: vertical;
         outline: none;
         transition: border-color 0.15s;
+    }
+
+    .site-edits button {
+        font-size: 12px;
+        color: var(--text-muted);
+        cursor: pointer;
+        opacity: 0.6;
+        transition: opacity 0.15s, color 0.15s;
+        user-select: none;
+        position: absolute;
+        right: 0;
+        bottom: 2px;
+    }
+
+    .site-edits button:hover {
+        opacity: 1;
+        color: var(--accent);
     }
 
     .site-edits textarea:focus {
