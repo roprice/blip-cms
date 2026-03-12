@@ -439,9 +439,9 @@
     }
 
     .file-site-header {
-        font-size: 10px;
+        font-size: 12px;
         font-weight: 600;
-        text-transform: uppercase;
+        text-transform: lowercase;
         letter-spacing: 0.05em;
         color: var(--text-muted);
         padding: 4px 10px 2px;
