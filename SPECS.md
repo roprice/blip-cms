@@ -66,13 +66,22 @@ React, Next.js, Vue, Svelte, and similar component-based frameworks are explicit
 ### Chrome extension structure
 
 - `manifest.json` - extension configuration, permissions, URL matching
-- `content.js` - injected into matched pages; manages the sidebar, edit button, design mode, DOM observation
-- `background.js` - handles GitHub OAuth flow and API communication
-- `sidebar.html` / `sidebar.css` - the sidebar UI (loaded inside the injected iframe)
+- `content.js` - injected into matched pages; manages the iframe, edit session, design mode, DOM observation, multi-file resolution
+- `content.css` - injected into matched pages; iframe positioning and page margin shift
+- `config.js` - injected into matched pages; all configuration (GitHub, file resolution, sidebar, LLM, observer settings)
+- `background.js` - service worker; handles GitHub API communication (fetch, commit, file listing) and LLM repair calls
+- `sidebar.html` - the sidebar UI (loaded inside the injected iframe); contains both collapsed tab widget and expanded sidebar views
+- `sidebar.js` - sidebar logic; view toggling, tab state, file list, dev panel
 
 ### Sidebar
 
-The sidebar is a custom-injected iframe on the left side of the browser window. It is sized as a percentage of the browser window width.
+The sidebar is a single custom-injected iframe on the left side of the browser window. This iframe contains both the collapsed state (a floating tab widget) and the expanded state (the full sidebar panel). The iframe itself changes size between these two states; the internal content toggles which view is visible.
+
+**Single-iframe architecture:**
+
+The iframe is always present in the DOM. When collapsed, it shrinks to the tab widget dimensions (~150px wide, 38px tall) and is transparent, floating over the page content. When expanded, it grows to 300px wide by 100vh and the page body receives a left margin to make room.
+
+This architecture solves a critical problem: `document.designMode = 'on'` on the host page makes all host-page DOM elements part of the editing surface. Controls injected directly into the host page (buttons, tabs) become unclickable during editing. Because the iframe has its own `document` object, `designMode` on the host page does not reach into the iframe, making all controls inside it always clickable.
 
 **Why a custom iframe instead of Chrome's native Side Panel:**
 
@@ -82,37 +91,41 @@ The sidebar is a custom-injected iframe on the left side of the browser window. 
 - Enables left-side positioning.
 - Communication between the sidebar iframe and the content script uses `window.postMessage`, which is straightforward.
 
-**Layout behavior:** When the sidebar opens, it pushes the page content to the right. This maintains the true WYSIWYG editing experience: the user sees the page at a real (slightly narrower) viewport width, not with a panel covering part of their content.
+**Layout behavior:** When the sidebar expands, it pushes the page content to the right via a CSS class (`blip-sidebar-open`) on the `<html>` element. This maintains the true WYSIWYG editing experience: the user sees the page at a real (slightly narrower) viewport width, not with a panel covering part of their content. When collapsed, the page occupies full width and the small tab widget floats over it transparently.
 
-**Why a sidebar at all:**
+**Collapsed tab widget:** When the sidebar is collapsed, a small floating tab appears at the top-left of the page. On hover, it expands to reveal state-specific controls (edit, save, saving..., saved!, retry) and an expand icon that opens the full sidebar. The tab changes background color based on state: light sage green (default), green (editing/saving/saved), red (error). This allows users to edit and save without ever opening the full sidebar.
 
-- **Clean editing canvas.** No floating controls or overlays on the page itself. The site content area remains unobstructed for true in-place editing.
-- **Sense of solidity.** The sidebar provides a persistent, grounded interface that makes the tool feel reliable and intentional, not like a fragile overlay.
-- **Configuration hub.** All account setup, repo mapping, and extension settings live in the sidebar. The user never navigates to a separate options page or external app. If Chrome's default extension options page is opened, it redirects to the sidebar.
-- **Future real estate.** As Blip evolves, the sidebar provides room for additional features (repo mapping UI, edit history, multi-file support) without cluttering the editing experience.
+**Sidebar persistent element:** The expanded sidebar always displays a "close" element (X) in the header, allowing the user to collapse it at any time.
 
-**Sidebar persistent element:** The sidebar always displays a "close" element (e.g., an X or collapse arrow) in every state, allowing the user to dismiss the sidebar at any time.
+**State persistence:** The sidebar's collapsed/expanded state is persisted to `chrome.storage.local` with a 30-minute expiry. Within that window, navigating between pages preserves the sidebar state. After 30 minutes of inactivity, the sidebar reverts to the default (collapsed).
 
-### Core editing mechanism
+## User onboarding experience
+1. User installs Blip.
+2. User "adds a site" by entering a URL and GitHub repo configuration.
+3. User visits a configured site and sees the floating tab widget's "edit" button
+
+
+## Core editing mechanism
 
 1. User visits a configured site.
-2. Sidebar appears with the edit button and a persistent close element.
-3. User clicks "Edit."
-4. Blip fetches the current source file from GitHub via the Contents API, receiving both the file content and its SHA. **[Dev notification: display the SHA and file size in the sidebar to confirm successful fetch.]**
-5. Blip parses the fetched source with `DOMParser` to create a clean source DOM. **[Dev notification: display parse status and node count in the sidebar.]**
-6. Blip walks the live DOM and the parsed source DOM in parallel, building a map of live text nodes to character offsets in the raw source string.
-7. Blip attaches a `MutationObserver` to the page, configured to watch `characterData` mutations.
-8. `document.designMode` is enabled on the page.
-9. User edits content directly on the page.
-10. User clicks "Save."
-11. Blip collects the list of observed text mutations and their mapped character offsets in the source.
-12. Blip applies targeted string replacements at the mapped positions in the raw source file, preserving all formatting, indentation, and framework-specific markup.
-13. Blip commits the modified file to GitHub via the Contents API using the previously fetched SHA.
-14. GitHub returns a response containing the new SHA.
-15. Blip stores the new SHA locally for subsequent edits (no need to re-fetch until the next session). **[Dev notification: display the new SHA in the sidebar to confirm successful commit and round-trip.]**
-16. The commit triggers the existing deployment pipeline (Netlify, Vercel, etc.).
-17. User sees "Saved" confirmation in the sidebar.
-18. UI returns to default state.
+2. Blip injects the sidebar iframe and fetches the repo file listing from GitHub to resolve which file corresponds to the current URL.
+3. Blip prefetches the resolved file's content and SHA from GitHub immediately (before the user clicks Edit).
+4. Sidebar appears in collapsed state (floating tab widget).
+5. User clicks "Edit" (via the tab widget or the expanded sidebar).
+6. Blip uses the prefetched source (or fetches if not yet available). It parses the source with `DOMParser` to create a clean source DOM. **[Dev notification: display parse status and node count.]**
+7. Blip walks the live DOM, building a dual-track map: simple text nodes to character offsets, and mixed-content parents to innerHTML regions.
+8. Blip attaches a `MutationObserver` watching both `characterData` and `childList` mutations.
+9. `document.designMode` is enabled on the page.
+10. User edits content directly on the page.
+11. User clicks "Save."
+12. Blip collects observed mutations and applies targeted replacements: character-offset replacements for simple text nodes, innerHTML comparison for mixed-content parents.
+13. If LLM is enabled and structural validation detects corruption, Blip calls Groq for syntax repair.
+14. Blip commits the modified file to GitHub via the Contents API using the prefetched SHA.
+15. GitHub returns a response containing the new SHA.
+16. Blip updates the local SHA immediately, priming the system for the next edit. **[Dev notification: transaction log with timestamps, payload SHA, response status, returned SHA, state confirmation.]**
+17. The commit triggers the existing deployment pipeline (Netlify, Vercel, etc.).
+18. User sees "Saved" confirmation.
+19. UI returns to default state.
 
 ### Diff strategy: dual-track mapping
 
@@ -122,9 +135,11 @@ The browser's DOM serializer does not preserve the original file's formatting. F
 
 #### Design principle: deterministic first, LLM as safety net
 
-Blip's architecture prioritizes speed and predictability. Every edit should be processed deterministically using JavaScript wherever possible. An LLM call (currently Groq/Llama 3.3 70B) exists as a safety net for structural corruption that the deterministic path cannot repair. The LLM is never in the critical path for normal edits. This principle ensures sub-second save times for the vast majority of edits, with a ~100-200ms LLM fallback only when structural validation detects corruption.
+Blip's architecture prioritizes speed and predictability. Every edit should be processed deterministically using JavaScript wherever possible. An LLM call (currently Groq/Llama 3.3 70B) exists as a potential safety net for structural corruption that the deterministic path cannot repair. The LLM is never in the critical path for normal edits. This principle ensures sub-second save times for the vast majority of edits, with a ~100-200ms LLM fallback only when structural validation detects corruption.
 
 If future testing reveals scenarios where the LLM consistently produces better results, the architecture supports expanding its role. The principle is not "avoid LLMs" but rather "don't add latency when you don't need to."
+
+The LLM modules is not active at this time. It may be added in the future, or leveraged for ancillary features.
 
 #### Track 1: simple text node mapping (fast path)
 
@@ -229,36 +244,53 @@ These notifications are behind a dev-mode flag so they can be easily removed or 
 
 ### Sidebar layout
 
-The sidebar occupies a percentage width of the browser window (suggested: 15-20% for the alpha, adjustable later). It is injected as an iframe on the left side of the viewport. When open, the page content shifts to the right to accommodate it.
+The sidebar is fixed at 300px wide. It is injected as an iframe on the left side of the viewport. When expanded, the page content shifts to the right to accommodate it. When collapsed, only the floating tab widget is visible.
 
 **Default state** (top to bottom):
 
 - Header: Blip logo/wordmark + close element (always visible)
 - Primary action: Edit button (large, prominent)
+- Notifications area
+- File list: all editable files, active file highlighted with green dot, others muted
 - Dev info area (alpha only): SHA, parse status, diagnostic details
-- Footer area: Settings/config link (future use)
 
 **Editing state** (top to bottom):
 
 - Header: Blip logo/wordmark + close element
-- Status indicator: "Editing" label (visually distinct, e.g., colored accent or badge)
+- Status indicator: "Editing" label (green accent badge with pulsing dot)
 - Action buttons: Save button, Cancel button
+- Notifications area
+- File list
 - Dev info area (alpha only): mutation count, tracked changes summary
 
 **After save** (top to bottom):
 
 - Header: Blip logo/wordmark + close element
-- Confirmation: "Saved" notification (auto-dismisses or persists until next action)
+- Confirmation: "Saved" notification (auto-dismisses after 4 seconds)
 - Primary action: Edit button returns
-- Dev info area (alpha only): new SHA, commit confirmation
+- File list
+- Dev info area (alpha only): transaction log with new SHA
 
-### Design principles for the sidebar
+### Collapsed tab widget
+
+When the sidebar is collapsed, a small floating tab at top-left provides a mini control panel:
+
+- Default: shows "blip". On hover, expands to show "blip [edit] [>>]".
+- Editing: green background, stays expanded, shows "blip [save] [>>]".
+- Saving: green background with pulse animation, shows "blip [saving...] [>>]" with animated ellipsis.
+- Saved: green background, shows "blip [saved!] [>>]" for 1.5 seconds, then contracts.
+- Error: red background, stays expanded, shows "blip [retry] [>>]".
+
+The tab controls delegate actions to content.js. The expand icon (>>) opens the full sidebar.
+
+### Design principles
 
 - Minimal. The sidebar should feel like a tool strip, not an application.
 - The edit button is the dominant element in default state. Everything else is secondary.
 - In editing state, save and cancel are equally accessible. Neither should require scrolling.
 - Dev notifications should be visually distinct from user-facing UI (muted color, smaller font, monospace) so they are clearly diagnostic.
 - The sidebar should have its own scroll if content overflows, independent of the page scroll.
+- Light, airy green palette: `#eef3ed` background, `#16a34a` accent. Translucent backgrounds throughout. The aesthetic is unobtrusive and bright, not heavy or dark.
 
 ## Account and configuration
 
@@ -266,8 +298,9 @@ The sidebar occupies a percentage width of the browser window (suggested: 15-20%
 
 For the alpha/personal-use version:
 
-- GitHub repo, branch, and file path are hardcoded in a single configuration object.
-- Authentication uses a GitHub personal access token stored in `chrome.storage.local`.
+- GitHub repo owner, repo name, branch, and personal access token are hardcoded in a single configuration object (`config.js`).
+- File path is resolved dynamically: Blip fetches the repo's file listing at init, filters to editable extensions (`.html`, `.php`), and matches the current URL path to a file. Template files are excluded via configurable patterns.
+- Authentication uses a GitHub personal access token.
 - The hardcoded values are isolated in a single config module to make future expansion straightforward.
 
 ### Future version
@@ -316,7 +349,7 @@ Blip is not for:
 
 ## Future considerations (out of scope for alpha)
 
-- Multi-file support (CSS edits, multiple HTML pages)
+- CSS editing support
 - Mobile editing (bookmarklet or PWA approach, since Chrome extensions don't run on mobile)
 - Visual diff preview before committing
 - Edit history panel in the sidebar
@@ -326,3 +359,5 @@ Blip is not for:
 - Branch selection (edit on a staging branch, merge later)
 - Auto-commit message customization
 - Keyboard shortcuts (Ctrl+S to save, Esc to cancel)
+- Sidebar width resizing (drag handle, currently hardcoded at 300px)
+- AI-assisted page creation from templates
