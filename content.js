@@ -803,8 +803,13 @@
 
       for (const pm of parentMap) {
         const currentInnerHTML = pm.liveParent.innerHTML;
-        const normalizedCurrent = currentInnerHTML.replace(/\s+/g, ' ').trim();
-        const normalizedOriginal = pm.sourceInnerHTML.replace(/\s+/g, ' ').trim();
+        const normalizedCurrent = stripDynamicAttributes(currentInnerHTML).replace(/\s+/g, ' ').trim();
+        const normalizedOriginal = stripDynamicAttributes(pm.sourceInnerHTML).replace(/\s+/g, ' ').trim();
+
+        // Skip if only attribute changes (Alpine, style mutations), no text changes
+        const liveText = normalizedCurrent.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        const sourceText = normalizedOriginal.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        if (liveText === sourceText) continue;
 
         if (normalizedCurrent !== normalizedOriginal) {
           parentLevelChanges.push({
@@ -825,8 +830,12 @@
         const mapping = findParentInSource(parent, sourceContent);
         if (mapping) {
           const currentInnerHTML = parent.innerHTML;
-          const normalizedCurrent = currentInnerHTML.replace(/\s+/g, ' ').trim();
-          const normalizedOriginal = mapping.innerHTML.replace(/\s+/g, ' ').trim();
+          const normalizedCurrent = stripDynamicAttributes(currentInnerHTML).replace(/\s+/g, ' ').trim();
+          const normalizedOriginal = stripDynamicAttributes(mapping.innerHTML).replace(/\s+/g, ' ').trim();
+
+          const liveText = normalizedCurrent.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+          const sourceText = normalizedOriginal.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+          if (liveText === sourceText) continue;
 
           if (normalizedCurrent !== normalizedOriginal) {
             parentLevelChanges.push({
@@ -1179,6 +1188,14 @@ Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers.
       current = current.parentElement;
     }
     return parts.join(' > ');
+  }
+
+  function stripDynamicAttributes(html) {
+    return html
+      .replace(/\s+style="[^"]*"/gi, '')
+      .replace(/\s+style='[^']*'/gi, '')
+      .replace(/\s+:[a-z][^=]*="[^"]*"/gi, '')
+      .replace(/\s+x-[a-z][^=]*="[^"]*"/gi, '');
   }
 
   // -------------------------------------------------------
