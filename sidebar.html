@@ -46,6 +46,7 @@
        ======================================================= */
     .collapsed-view {
       padding: 0;
+      width: fit-content;
     }
 
     .blip-tab {
@@ -70,7 +71,7 @@
     }
 
     .blip-tab:hover {
-      width: 106px;
+      width: fit-content;
     }
 
     .blip-tab .tab-name {
@@ -82,7 +83,7 @@
       display: none;
       padding-left: 8px;
       width: 54px;
-      text-align: center;
+      text-align: left;
       cursor: pointer;
       opacity: 0.85;
       transition: opacity 0.1s;
@@ -124,11 +125,21 @@
       background: #16a34a;
       border-color: #16a34a;
       color: #f1f1f1;
-      width: 106px;
+      width: 136px;
       cursor: pointer;
       position: relative;
+    }
 
+    span.editing-label {
 
+      font-weight: 100;
+      width: 40px;
+      display: inline-block;
+
+    }
+
+    span.label-save {
+      font-weight: 600;
     }
 
     .blip-tab.tab-state-editing .tab-show-editing {
@@ -144,7 +155,7 @@
       background: #16a34a;
       border-color: #16a34a;
       color: #f1f1f1;
-      width: 106px;
+      width: 136px;
       animation: tab-pulse 1.5s ease-in-out infinite;
     }
 
@@ -175,6 +186,12 @@
       animation: tab-dots-anim 1.2s steps(4, end) infinite;
     }
 
+    /* Ellipsis animation */
+    .tab-dots-slow::after {
+      content: '';
+      animation: tab-dots-anim 4s steps(4, end) infinite;
+    }
+
     @keyframes tab-dots-anim {
       0% {
         content: '';
@@ -198,7 +215,7 @@
       background: #16a34a;
       border-color: #16a34a;
       color: #f1f1f1;
-      width: 106px;
+      width: 136px;
     }
 
     .blip-tab.tab-state-saved .tab-show-saved {
@@ -215,7 +232,7 @@
       background: #dc2626;
       border-color: #dc2626;
       color: #f1f1f1;
-      width: 106px;
+      width: 136px;
     }
 
     .blip-tab.tab-state-error .tab-show-error {
@@ -596,7 +613,10 @@
     <div id="blipTab" class="blip-tab tab-state-default">
       <span class="tab-name">blip</span>
       <span class="tab-control tab-show-default" data-action="startEdit">edit</span>
-      <span class="tab-control tab-show-editing" data-action="save">save</span>
+      <span class="tab-control tab-show-editing">
+        <span class="editing-label" data-action="cancel">cancel</span>
+        <span class="label-save" data-action="save">save<span class="tab-dots-slow"></span></span>
+      </span>
       <span class="tab-control tab-show-saving">saving<span class="tab-dots"></span></span>
       <span class="tab-control tab-show-saved">saved!</span>
       <span class="tab-control tab-show-error" data-action="startEdit">retry</span>
