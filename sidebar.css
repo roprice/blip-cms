@@ -88,12 +88,14 @@
         padding-left: 10px;
         cursor: pointer;
         opacity: 0.5;
-        font-size: 18px;
+        font-size: 17px;
         letter-spacing: -3px;
         transition: opacity 0.1s;
+        height: 35px;
+        width: 30px;
         position: absolute;
-        right: 10px;
-        top: 1px;
+        right: 0;
+        top: 5px;
     }
 
     .blip-tab .tab-expand:hover {
@@ -103,6 +105,13 @@
     .blip-tab:hover .tab-expand {
         display: inline-block;
     }
+
+    .tab-expand .material-symbols-outlined {
+        font-size: 15px;
+        pointer-events: none;
+    }
+
+
 
     .blip-tab.tab-state-default:hover .tab-show-default {
         display: inline-block;

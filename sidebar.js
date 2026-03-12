@@ -244,6 +244,14 @@ function showExpandedView() {
     document.body.classList.add('sidebar-expanded');
     expandedView.classList.remove('hidden');
     collapsedView.classList.add('hidden');
+
+    // Recalculate text area height after the sidebar paints
+    setTimeout(() => {
+        if (editsTextarea && editsTextarea.value) {
+            editsTextarea.style.height = 'auto';
+            editsTextarea.style.height = Math.min(editsTextarea.scrollHeight, 500) + 'px';
+        }
+    }, 50);
 }
 
 // -------------------------------------------------------
