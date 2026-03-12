@@ -1,25 +1,11 @@
 // Blip configuration
-// Alpha version: hardcoded values. Future: populated from chrome.storage via sidebar UI.
+// Static settings only. Site/GitHub config is stored in chrome.storage.local via the sidebar UI.
 
 const BLIP_CONFIG = {
-  // GitHub settings
-  github: {
-    owner: 'roprice',
-    repo: 'remaphq-site',
-    branch: 'main',
-    token: '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'
-  },
-
   // File resolution
   files: {
     editableExtensions: ['.html', '.php'],
-    // Files matching these patterns are excluded from the editable list
     excludePatterns: ['template']
-  },
-
-  // Site matching
-  site: {
-    url: 'remaphq.com'
   },
 
   // Sidebar settings
@@ -44,6 +30,6 @@ const BLIP_CONFIG = {
     enabled: false,
     endpoint: 'https://api.groq.com/openai/v1/chat/completions',
     model: 'llama-3.3-70b-versatile',
-    apiKey: 'YOUR_GROQ_API_KEY'
+    apiKey: ''
   }
 };

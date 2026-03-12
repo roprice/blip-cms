@@ -175,8 +175,12 @@
 
   function sendInitialDevLogs() {
     devLog('Site', window.location.hostname, 'success');
-    devLog('Repo', `${BLIP_CONFIG.github.owner}/${BLIP_CONFIG.github.repo}`, '');
-    devLog('Branch', BLIP_CONFIG.github.branch, '');
+
+    if (githubConfig) {
+      devLog('Repo', `${githubConfig.owner}/${githubConfig.repo}`, '');
+      devLog('Branch', githubConfig.branch, '');
+    }
+
     devLog('Path', window.location.pathname, '');
     devLog('File', resolvedFilePath || 'resolving...', resolvedFilePath ? 'success' : '', 'resolved-file');
     devSeparator();
@@ -186,11 +190,11 @@
     devLog('Mode', 'designMode OFF', '', 'edit-mode');
     devLog('Observer', 'idle', '', 'observer-status');
 
-    // Resend file info in case it was resolved before sidebar was ready
     if (editableFiles.length > 0) {
       sendToSidebar('fileInfo', {
         resolvedFile: resolvedFilePath,
-        editableFiles: editableFiles.map(f => f.name)
+        editableFiles: editableFiles.map(f => f.name),
+        siteUrl: githubConfig.siteUrl
       });
     }
   }
@@ -201,7 +205,7 @@
   async function listRepoFiles() {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
-        { type: 'GITHUB_LIST_FILES', config: BLIP_CONFIG.github },
+        { type: 'GITHUB_LIST_FILES', config: githubConfig },
         (response) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
@@ -216,7 +220,7 @@
   }
 
   async function fetchFromGitHub(filePath) {
-    const configWithPath = { ...BLIP_CONFIG.github, filePath: filePath || resolvedFilePath };
+    const configWithPath = { ...githubConfig, filePath: filePath || resolvedFilePath };
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         { type: 'GITHUB_FETCH', config: configWithPath },
@@ -234,7 +238,7 @@
   }
 
   async function commitToGitHub(content, sha) {
-    const configWithPath = { ...BLIP_CONFIG.github, filePath: resolvedFilePath };
+    const configWithPath = { ...githubConfig, filePath: resolvedFilePath };
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         { type: 'GITHUB_COMMIT', config: configWithPath, content, sha },
@@ -1218,17 +1222,41 @@ Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers.
   // -------------------------------------------------------
   function init() {
     const currentHost = window.location.hostname.replace('www.', '');
-    if (!currentHost.includes(BLIP_CONFIG.site.url)) return;
-
     injectSidebar();
-    resolveAndPrefetch();
+    loadSiteConfig(currentHost);
+  }
+
+  async function loadSiteConfig(currentHost) {
+    try {
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get(['blipSites'], resolve);
+      });
+
+      const sites = result.blipSites || [];
+      const match = sites.find(s => currentHost.includes(s.siteUrl) || s.siteUrl.includes(currentHost));
+
+      if (match) {
+        githubConfig = {
+          owner: match.owner,
+          repo: match.repo,
+          branch: match.branch || 'main',
+          token: match.token,
+          siteUrl: match.siteUrl
+        };
+        resolveAndPrefetch();
+      } else {
+        sendToSidebar('noSiteConfig');
+      }
+    } catch (err) {
+      sendToSidebar('noSiteConfig');
+    }
   }
 
   async function resolveAndPrefetch() {
     try {
       // Step 1: Fetch repo file listing
       const t0 = Date.now();
-      repoFiles = await listRepoFiles();
+      const repoFiles = await listRepoFiles();
       const listLatency = Date.now() - t0;
 
       // Step 2: Filter to editable files
@@ -1242,18 +1270,18 @@ Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers.
       if (!resolvedFilePath) {
         devLog('File', `no match for "${window.location.pathname}"`, 'error', 'resolved-file');
         sendToSidebar('fileInfo', {
-          resolvedFile: null,
-          editableFiles: editableFiles.map(f => f.name)
+          resolvedFile: resolvedFilePath,
+          editableFiles: editableFiles.map(f => f.name),
+          siteUrl: githubConfig.siteUrl
         });
         return;
       }
 
       devLog('File', resolvedFilePath, 'success', 'resolved-file');
-
-      // Send file info to sidebar for the indicator
       sendToSidebar('fileInfo', {
         resolvedFile: resolvedFilePath,
-        editableFiles: editableFiles.map(f => f.name)
+        editableFiles: editableFiles.map(f => f.name),
+        siteUrl: githubConfig.siteUrl
       });
 
       // Step 4: Prefetch the resolved file
