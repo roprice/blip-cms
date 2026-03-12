@@ -1,5 +1,9 @@
-// Sidebar script - communicates with content script via postMessage
+// Sidebar script
+// Manages both collapsed (tab widget) and expanded (full sidebar) views
 
+// -------------------------------------------------------
+// Expanded view elements
+// -------------------------------------------------------
 const editBtn = document.getElementById('editBtn');
 const saveBtn = document.getElementById('saveBtn');
 const cancelBtn = document.getElementById('cancelBtn');
@@ -7,20 +11,44 @@ const closeBtn = document.getElementById('closeBtn');
 const defaultState = document.getElementById('defaultState');
 const editingState = document.getElementById('editingState');
 const savingState = document.getElementById('savingState');
-const fileIndicator = document.getElementById('fileIndicator');
+const fileList = document.getElementById('fileList');
 const notifications = document.getElementById('notifications');
 const devLog = document.getElementById('devLog');
 const devPanel = document.getElementById('devPanel');
 const devToggle = document.getElementById('devToggle');
 
-devToggle.addEventListener('click', () => {
-    devPanel.classList.toggle('collapsed');
-});
+// -------------------------------------------------------
+// View elements
+// -------------------------------------------------------
+const collapsedView = document.getElementById('collapsedView');
+const expandedView = document.getElementById('expandedView');
+const blipTab = document.getElementById('blipTab');
 
+// -------------------------------------------------------
+// Communication with content script
+// -------------------------------------------------------
 function sendToContent(action, data = {}) {
     window.parent.postMessage({ source: 'blip-sidebar', action, ...data }, '*');
 }
 
+// -------------------------------------------------------
+// Collapsed view: tab widget click handling
+// -------------------------------------------------------
+blipTab.addEventListener('click', (e) => {
+    const action = e.target.dataset?.action;
+    if (!action) return;
+
+    if (action === 'expandSidebar') {
+        sendToContent('expandSidebar');
+        return;
+    }
+    // All other actions delegate directly to content.js
+    sendToContent(action);
+});
+
+// -------------------------------------------------------
+// Expanded view: button handlers
+// -------------------------------------------------------
 editBtn.addEventListener('click', () => {
     editBtn.disabled = true;
     editBtn.textContent = 'Loading...';
@@ -40,12 +68,52 @@ closeBtn.addEventListener('click', () => {
     sendToContent('closeSidebar');
 });
 
-// State transitions
+devToggle.addEventListener('click', () => {
+    devPanel.classList.toggle('collapsed');
+});
+
+// -------------------------------------------------------
+// View toggling
+// -------------------------------------------------------
+function showCollapsedView() {
+    document.body.classList.remove('sidebar-expanded');
+    collapsedView.classList.remove('hidden');
+    expandedView.classList.add('hidden');
+}
+
+function showExpandedView() {
+    document.body.classList.add('sidebar-expanded');
+    expandedView.classList.remove('hidden');
+    collapsedView.classList.add('hidden');
+}
+
+// -------------------------------------------------------
+// Tab state management
+// -------------------------------------------------------
+let tabContractTimer = null;
+
+function setTabState(state) {
+    // Remove all state classes
+    blipTab.className = 'blip-tab tab-state-' + state;
+
+    // Auto-contract after "saved" state
+    if (state === 'saved') {
+        if (tabContractTimer) clearTimeout(tabContractTimer);
+        tabContractTimer = setTimeout(() => {
+            setTabState('default');
+            tabContractTimer = null;
+        }, 1500);
+    }
+}
+
+// -------------------------------------------------------
+// Expanded view: state transitions
+// -------------------------------------------------------
 function showEditing() {
     defaultState.classList.add('hidden');
     savingState.classList.add('hidden');
     editingState.classList.remove('hidden');
-    saveBtn.disabled = true;  // disabled until edits are detected
+    saveBtn.disabled = true;
     cancelBtn.disabled = false;
     editBtn.disabled = false;
     editBtn.textContent = 'Edit';
@@ -56,16 +124,6 @@ function showSaving() {
     editingState.classList.add('hidden');
     defaultState.classList.add('hidden');
     savingState.classList.remove('hidden');
-    savingState.querySelector('.status-badge').className = 'status-badge saving';
-    savingState.querySelector('.status-badge').innerHTML = '<span class="status-dot"></span> Saving...';
-}
-
-function showSyncing(message) {
-    editingState.classList.add('hidden');
-    defaultState.classList.add('hidden');
-    savingState.classList.remove('hidden');
-    savingState.querySelector('.status-badge').className = 'status-badge syncing';
-    savingState.querySelector('.status-badge').innerHTML = '<span class="status-dot"></span> ' + escapeHtml(message);
 }
 
 function showDefault() {
@@ -76,13 +134,23 @@ function showDefault() {
     editBtn.textContent = 'Edit';
 }
 
+function showSyncing(message) {
+    savingState.classList.add('hidden');
+    editingState.classList.add('hidden');
+    defaultState.classList.add('hidden');
+    showNotification(message, 'info');
+}
+
+// -------------------------------------------------------
+// Notifications
+// -------------------------------------------------------
 function showNotification(message, type = 'success') {
     const div = document.createElement('div');
     div.className = `notification ${type}`;
     div.textContent = message;
     notifications.appendChild(div);
 
-    if (type === 'success' || type === 'info') {
+    if (type === 'success') {
         setTimeout(() => div.remove(), 4000);
     }
 }
@@ -100,17 +168,42 @@ function showErrorWithReload(userMessage) {
     notifications.appendChild(div);
 }
 
+function clearNotifications() {
+    notifications.innerHTML = '';
+}
+
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
 }
 
-function clearNotifications() {
-    notifications.innerHTML = '';
+// -------------------------------------------------------
+// File list
+// -------------------------------------------------------
+function updateFileList(resolvedFile, editableFiles) {
+    if (!fileList || !editableFiles) return;
+
+    const sorted = [...editableFiles].sort((a, b) => a.localeCompare(b));
+
+    fileList.innerHTML = sorted.map(fileName => {
+        const isActive = fileName === resolvedFile;
+        return `<div class="file-item ${isActive ? 'active' : ''}">
+            <span class="file-dot"></span>
+            <span class="file-name">${escapeHtml(fileName)}</span>
+        </div>`;
+    }).join('');
+
+    if (!resolvedFile) {
+        editBtn.disabled = true;
+    } else {
+        editBtn.disabled = false;
+    }
 }
 
+// -------------------------------------------------------
 // Dev logging
+// -------------------------------------------------------
 function devLogEntry(label, value, status = '', entryId = null) {
     if (entryId) {
         const existing = devLog.querySelector(`[data-entry-id="${entryId}"]`);
@@ -136,12 +229,29 @@ function devLogSeparator() {
     devLog.scrollTop = devLog.scrollHeight;
 }
 
-// Listen for messages from content script
+// -------------------------------------------------------
+// Message handler: receive from content script
+// -------------------------------------------------------
 window.addEventListener('message', (event) => {
     const msg = event.data;
     if (msg.source !== 'blip-content') return;
 
     switch (msg.action) {
+        // View toggling
+        case 'collapse':
+            showCollapsedView();
+            break;
+
+        case 'expand':
+            showExpandedView();
+            break;
+
+        // Tab state (from content.js state transitions)
+        case 'tabState':
+            setTabState(msg.state);
+            break;
+
+        // Editing flow
         case 'editStarted':
             showEditing();
             break;
@@ -164,21 +274,19 @@ window.addEventListener('message', (event) => {
             showNotification('Nothing to save yet. Make some edits first.', 'info');
             break;
 
+        // Error handling
         case 'syncError':
-            // Auto-recovery in progress: show syncing message with countdown
             showSyncing(msg.userMessage || 'Re-syncing...');
             break;
 
         case 'recovered':
-            // Recovery complete: show success and re-enable editing
             showDefault();
-            showNotification('Could not sync. Try reloading the page and trying again', 'info');
+            showNotification('Synced. Your edits were not saved, but you can try again.', 'error');
             break;
 
         case 'recoveryFailed':
-            // Recovery failed: show reload option
             showDefault();
-            showErrorWithReload(msg.userMessage || 'Could not sync. Try reloading the page and trying again.');
+            showErrorWithReload(msg.userMessage || 'Could not sync. Please reload the page.');
             break;
 
         case 'error':
@@ -186,10 +294,16 @@ window.addEventListener('message', (event) => {
             if (msg.recoverable) {
                 showNotification(msg.userMessage || 'Something went wrong', 'error');
             } else {
-                showErrorWithReload(msg.userMessage || 'Could not sync. Try reloading the page and trying again.');
+                showErrorWithReload(msg.userMessage || 'Something went wrong. Try reloading the page.');
             }
             break;
 
+        // File info
+        case 'fileInfo':
+            updateFileList(msg.resolvedFile, msg.editableFiles);
+            break;
+
+        // Dev logging
         case 'devLog':
             devLogEntry(msg.label, msg.value, msg.status || '', msg.entryId || null);
             break;
@@ -197,34 +311,8 @@ window.addEventListener('message', (event) => {
         case 'devSeparator':
             devLogSeparator();
             break;
-
-        case 'fileInfo':
-            updateFileIndicator(msg.resolvedFile, msg.editableFiles);
-            break;
     }
 });
 
+// Tell the content script we're ready
 sendToContent('ready');
-
-function updateFileIndicator(resolvedFile, editableFiles) {
-    if (!fileIndicator) return;
-
-    if (!resolvedFile) {
-        fileIndicator.innerHTML = `
-            <span class="file-icon">&#x2717;</span>
-            <span class="file-name">No editable file for this page</span>
-        `;
-        fileIndicator.classList.add('no-file');
-        fileIndicator.classList.remove('has-file');
-        editBtn.disabled = true;
-        return;
-    }
-
-    fileIndicator.innerHTML = `
-        <span class="file-icon">&#x25CF;</span>
-        <span class="file-name">${escapeHtml(resolvedFile)}</span>
-    `;
-    fileIndicator.classList.add('has-file');
-    fileIndicator.classList.remove('no-file');
-    editBtn.disabled = false;
-}

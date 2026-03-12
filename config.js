@@ -24,9 +24,7 @@ const BLIP_CONFIG = {
 
   // Sidebar settings
   sidebar: {
-    defaultWidthPx: 300,
-    minWidthPx: 180,
-    maxWidthPx: 500,
+    widthPx: 300,
     startCollapsed: true
   },
 

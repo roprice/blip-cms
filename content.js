@@ -31,189 +31,56 @@
   // -------------------------------------------------------
   // Sidebar injection
   // -------------------------------------------------------
-  let dragHandle = null;
-  let collapsedTab = null;
   let currentSidebarWidth = 0;
 
   function injectSidebar() {
     if (document.getElementById('blip-sidebar-frame')) return;
 
-    const width = BLIP_CONFIG.sidebar.defaultWidthPx;
-
     sidebarFrame = document.createElement('iframe');
     sidebarFrame.id = 'blip-sidebar-frame';
     sidebarFrame.src = chrome.runtime.getURL('sidebar.html');
-    sidebarFrame.style.width = width + 'px';
+    sidebarFrame.setAttribute('allowtransparency', 'true');
 
     document.documentElement.appendChild(sidebarFrame);
-
-    injectDragHandle(width);
-    injectCollapsedTab();
-
     window.addEventListener('message', handleSidebarMessage);
 
-    // Check stored sidebar state (with 30-min expiry), fallback to config default
-    getSidebarState().then((storedState) => {
-      if (storedState === 'expanded') {
-        expandSidebar();
-      } else if (storedState === 'collapsed') {
-        collapseSidebar();
-      } else if (BLIP_CONFIG.sidebar.startCollapsed) {
-        collapseSidebar();
-      } else {
-        expandSidebar();
-      }
+    // Wait for iframe to load before applying stored state
+    sidebarFrame.addEventListener('load', () => {
+      getSidebarState().then((storedState) => {
+        if (storedState === 'expanded') {
+          expandSidebar();
+        } else if (storedState === 'collapsed') {
+          collapseSidebar();
+        } else if (BLIP_CONFIG.sidebar.startCollapsed) {
+          collapseSidebar();
+        } else {
+          expandSidebar();
+        }
+      });
     });
-  }
-
-  function injectDragHandle(initialLeft) {
-    if (dragHandle) return;
-
-    dragHandle = document.createElement('div');
-    dragHandle.id = 'blip-drag-handle';
-    dragHandle.style.left = initialLeft + 'px';
-    dragHandle.addEventListener('mousedown', startDrag);
-    document.documentElement.appendChild(dragHandle);
-  }
-
-  function injectCollapsedTab() {
-    if (collapsedTab) return;
-
-    collapsedTab = document.createElement('div');
-    collapsedTab.id = 'blip-collapsed-tab';
-    collapsedTab.className = 'blip-tab-state-default';
-    collapsedTab.setAttribute('contenteditable', 'false');
-    collapsedTab.innerHTML = `
-      <span class="blip-tab-name">blip</span>
-      <span class="blip-tab-control blip-tab-show-default" data-action="startEdit">edit</span>
-      <span class="blip-tab-control blip-tab-show-editing" data-action="save">save<span class="blinking"></span></span>
-      <span class="blip-tab-control blip-tab-show-saving">saving<span class="blip-tab-dots"></span></span>
-      <span class="blip-tab-control blip-tab-show-saved">saved!</span>
-      <span class="blip-tab-control blip-tab-show-error" data-action="startEdit">retry</span>
-      <span class="blip-tab-expand" data-action="expand" title="Open sidebar">\u203A\u203A</span>
-    `;
-    document.documentElement.appendChild(collapsedTab);
-
-    // Hover expand/contract
-    collapsedTab.addEventListener('mouseenter', onTabMouseEnter);
-    collapsedTab.addEventListener('mouseleave', onTabMouseLeave);
-
-    // Click delegation - prevent designMode from capturing
-    collapsedTab.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }, true);
-    collapsedTab.addEventListener('click', onTabClick, true);
-  }
-
-  let tabContractTimer = null;
-
-  function onTabMouseEnter() {
-    if (tabContractTimer) {
-      clearTimeout(tabContractTimer);
-      tabContractTimer = null;
-    }
-    collapsedTab.classList.add('blip-tab-expanded');
-  }
-
-  function onTabMouseLeave() {
-    const state = getTabState();
-    // Stay expanded during active states
-    if (state === 'editing' || state === 'saving' || state === 'error') return;
-    if (state === 'saved') return; // will contract after saved timeout
-    collapsedTab.classList.remove('blip-tab-expanded');
-  }
-
-  function onTabClick(e) {
-    const action = e.target.dataset?.action;
-    if (!action) return;
-
-    if (action === 'expand') {
-      expandSidebar();
-      return;
-    }
-    if (action === 'startEdit') {
-      startEditSession();
-      return;
-    }
-    if (action === 'save') {
-      saveEdits();
-      return;
-    }
-  }
-
-  function getTabState() {
-    if (!collapsedTab) return 'default';
-    const classes = collapsedTab.className;
-    if (classes.includes('state-saving')) return 'saving';
-    if (classes.includes('state-saved')) return 'saved';
-    if (classes.includes('state-editing')) return 'editing';
-    if (classes.includes('state-error')) return 'error';
-    return 'default';
-  }
-
-  function setTabState(state) {
-    if (!collapsedTab) return;
-    collapsedTab.className = `blip-tab-state-${state}`;
-    // Keep expanded class if tab is hovered or in an active state
-    if (state === 'editing' || state === 'saving' || state === 'error') {
-      collapsedTab.classList.add('blip-tab-expanded');
-    }
-    if (state === 'saved') {
-      collapsedTab.classList.add('blip-tab-expanded');
-      // Contract after 1.5 seconds
-      tabContractTimer = setTimeout(() => {
-        setTabState('default');
-        collapsedTab.classList.remove('blip-tab-expanded');
-        tabContractTimer = null;
-      }, 1500);
-    }
-  }
-
-  function setSidebarWidth(w) {
-    const clamped = Math.max(BLIP_CONFIG.sidebar.minWidthPx, Math.min(BLIP_CONFIG.sidebar.maxWidthPx, w));
-    currentSidebarWidth = clamped;
-
-    if (sidebarFrame) {
-      sidebarFrame.style.width = clamped + 'px';
-    }
-    document.documentElement.style.setProperty('--blip-sidebar-width', clamped + 'px');
-    if (dragHandle) dragHandle.style.left = clamped + 'px';
   }
 
   function collapseSidebar() {
     currentSidebarWidth = 0;
     if (sidebarFrame) {
-      sidebarFrame.style.display = 'none';
+      sidebarFrame.classList.add('blip-iframe-collapsed');
+      sidebarFrame.classList.remove('blip-iframe-expanded');
     }
     document.documentElement.classList.remove('blip-sidebar-open');
-    document.documentElement.style.setProperty('--blip-sidebar-width', '0px');
-    if (dragHandle) {
-      dragHandle.style.left = '0px';
-      dragHandle.style.display = 'none';
-    }
-    if (collapsedTab) {
-      collapsedTab.style.display = 'block';
-    }
+    /*document.documentElement.style.setProperty('--blip-sidebar-width', '0px');*/
+    sendToSidebar('collapse');
     saveSidebarState('collapsed');
   }
 
   function expandSidebar() {
-    const width = BLIP_CONFIG.sidebar.defaultWidthPx;
-    currentSidebarWidth = width;
+    currentSidebarWidth = 300;
     if (sidebarFrame) {
-      sidebarFrame.style.display = '';
-      sidebarFrame.style.width = width + 'px';
+      sidebarFrame.classList.add('blip-iframe-expanded');
+      sidebarFrame.classList.remove('blip-iframe-collapsed');
     }
     document.documentElement.classList.add('blip-sidebar-open');
-    document.documentElement.style.setProperty('--blip-sidebar-width', width + 'px');
-    if (dragHandle) {
-      dragHandle.style.left = width + 'px';
-      dragHandle.style.display = '';
-    }
-    if (collapsedTab) {
-      collapsedTab.style.display = 'none';
-    }
+    /*document.documentElement.style.setProperty('--blip-sidebar-width', '300px');*/
+    sendToSidebar('expand');
     saveSidebarState('expanded');
   }
 
@@ -246,37 +113,6 @@
         resolve(null);
       }
     });
-  }
-
-  function startDrag(e) {
-    e.preventDefault();
-
-    if (sidebarFrame) sidebarFrame.style.transition = 'none';
-    if (dragHandle) dragHandle.style.transition = 'none';
-
-    const onMove = (ev) => {
-      const x = ev.clientX;
-      if (x < 60) {
-        collapseSidebar();
-        onUp();
-        return;
-      }
-      const w = Math.max(BLIP_CONFIG.sidebar.minWidthPx, Math.min(BLIP_CONFIG.sidebar.maxWidthPx, x));
-      currentSidebarWidth = w;
-      if (sidebarFrame) sidebarFrame.style.width = w + 'px';
-      document.documentElement.style.setProperty('--blip-sidebar-width', w + 'px');
-      if (dragHandle) dragHandle.style.left = w + 'px';
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.userSelect = '';
-      if (sidebarFrame) sidebarFrame.style.transition = '';
-      if (dragHandle) dragHandle.style.transition = '';
-    };
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
   }
 
   function removeSidebar() {
@@ -328,6 +164,9 @@
         cancelEdits();
         collapseSidebar();
         break;
+      case 'expandSidebar':
+        expandSidebar();
+        break;
       case 'reloadPage':
         window.location.reload();
         break;
@@ -346,6 +185,14 @@
     devSeparator();
     devLog('Mode', 'designMode OFF', '', 'edit-mode');
     devLog('Observer', 'idle', '', 'observer-status');
+
+    // Resend file info in case it was resolved before sidebar was ready
+    if (editableFiles.length > 0) {
+      sendToSidebar('fileInfo', {
+        resolvedFile: resolvedFilePath,
+        editableFiles: editableFiles.map(f => f.name)
+      });
+    }
   }
 
   // -------------------------------------------------------
@@ -842,7 +689,7 @@
       // Guard: must have a resolved file
       if (!resolvedFilePath) {
         sendToSidebar('error', {
-          userMessage: 'No editable file found for this page.',
+          userMessage: 'No editable file found for this page. Did you configure your GitHub settings?',
           recoverable: false
         });
         return;
@@ -889,7 +736,7 @@
 
       devLog('Mode', 'designMode ON', 'success', 'edit-mode');
       sendToSidebar('editStarted');
-      setTabState('editing');
+      sendToSidebar('tabState', { state: 'editing' });
 
     } catch (err) {
       devLog('Error', err.message, 'error');
@@ -897,7 +744,7 @@
         userMessage: 'Could not start editing. Try reloading the page.',
         recoverable: false
       });
-      setTabState('error');
+      sendToSidebar('tabState', { state: 'error' });
     }
   }
 
@@ -907,7 +754,7 @@
   async function saveEdits() {
     if (!isEditing || !sourceContent || isSaving) return;
     isSaving = true;
-    setTabState('saving');
+    sendToSidebar('tabState', { state: 'saving' });
 
     try {
       // Flush pending observer records
@@ -1127,11 +974,11 @@
       exitEditMode();
       isSaving = false;
       sendToSidebar('saved');
-      setTabState('saved');
+      sendToSidebar('tabState', { state: 'saved' });
 
     } catch (err) {
       isSaving = false;
-      setTabState('error');
+      sendToSidebar('tabState', { state: 'error' });
       const errorTimestamp = new Date().toISOString().slice(11, 23);
 
       // Extract HTTP status if available
@@ -1303,7 +1150,7 @@ Output ONLY the corrected edited fragments, separated by ---FRAGMENT--- markers.
 
     exitEditMode();
     sendToSidebar('cancelled');
-    setTabState('default');
+    sendToSidebar('tabState', { state: 'default' });
   }
 
   // -------------------------------------------------------
