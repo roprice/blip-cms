@@ -361,10 +361,6 @@ This pattern is well-established among Chrome extensions. No full web applicatio
 
 ## Use cases
 
-### Pro (GitHub-connected)
-
-Blip is for quick, reactive edits:
-
 - Fix a typo or grammatical error
 - Update a price, date, or statistic
 - Rewrite a headline because a better idea just hit you
@@ -373,13 +369,44 @@ Blip is for quick, reactive edits:
 - Adjust copy after reading it on the live site (where it reads differently than in a code editor)
 - Fix something urgently from anywhere you have a browser
 - Any edit driven by urgency, inspiration, or real-world context that would lose momentum if routed through a code editor
-
-### Freemium (any website)
-
-- Suggest copy edits to a colleague's website and email them the diff
 - Audit a client's site and capture all proposed text changes in one session
 - Save a before/after record of edits you want to make to your own site later
 - Review a staging site and batch your feedback as structured diffs rather than screenshots
+
+
+### Freemium features (any website or web application):
+
+- Suggest copy edits to a website and send them the diff (by copying and pasting the diff into an email or Slack message)
+- Save your edits locally, then send them later as a block of text
+- Edit any number of websites or web applications
+
+### Blip Pro features:
+
+- Everything in Freemium (get a local edit history while also saving to GitHub)
+- Edit any number of sites or web apps in real time, instantly
+- Connect to your GitHub repositories
+- Edit files in your GitHub repositories
+- Save your edits to your GitHub repositories
+- Commit your edits to your GitHub repositories
+- Branch your edits to your GitHub repositories
+- Merge your edits to your GitHub repositories
+
+
+### Blip Pro roadmap milestone 1: Basic CMS features
+
+- create new pages, posts, or landing pages
+- edit SEO for all pages
+- edit reusable templates for pages, posts, and landing pages
+
+
+### Blip Pro roadmap milestone 2: AI-assisted editing
+
+- Use AI to suggest edits
+- Use AI to generate new pages or sections
+- Use AI to restructure navigation or layout
+- Use AI to upload or manage images
+- Use AI to create new HTML elements or modify site structure
+
 
 ### Out of scope
 
@@ -393,14 +420,20 @@ Blip is not for:
 
 ## Future considerations (out of scope for alpha)
 
+### Top tier:
 - Writing new pages blog posts, landing pages, or long-form content, using a templating system
 - AI-assisted page creation from templates
 - Inserting SEO meta tags, titles, and descriptions, optionally using AI
+
+### Tier two
 - Email diffs directly from Blip (branded email from a Blip domain)
 - CSS editing support
-- Mobile editing (bookmarklet or PWA approach, since Chrome extensions don't run on mobile)
 - Visual diff preview before committing
+
+
+### Tier three (post-revenue)
 - Collaborative editing (multiple users editing the same site)
+- Mobile editing (bookmarklet or PWA approach, since Chrome extensions don't run on mobile)
 - Support for non-GitHub hosts (GitLab, Bitbucket)
 - Image replacement via drag-and-drop
 - Branch selection (edit on a staging branch, merge later)
