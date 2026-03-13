@@ -160,7 +160,7 @@ function sendInitialDevLogs() {
   devLog('Source', 'initializing...', '', 'source-status');
   devLog('File SHA', '-', '', 'file-sha');
   devSeparator();
-  devLog('Mode', 'designMode OFF', '', 'edit-mode');
+  devLog('Mode', 'designMode OFF, body non-editable', '', 'edit-mode');
   devLog('Observer', 'idle', '', 'observer-status');
   if (editableFiles.length > 0) {
     sendToSidebar('fileInfo', {
@@ -288,12 +288,12 @@ async function startEditSession() {
     interceptPaste();
     startObserving();
 
+    document.body.contentEditable = 'true';
     document.designMode = 'on';
-
     document.documentElement.classList.add('blip-editing');
     isEditing = true;
 
-    devLog('Mode', 'designMode ON', 'success', 'edit-mode');
+    devLog('Mode', 'designMode ON, body editable', 'success', 'edit-mode');
     sendToSidebar('editStarted');
     sendToSidebar('tabState', { state: 'editing' });
 
@@ -594,10 +594,11 @@ function stripDynamicAttributes(html) {
 
 function exitEditMode() {
   document.designMode = 'off';
+  document.body.removeAttribute('contenteditable');
   document.documentElement.classList.remove('blip-editing');
   isEditing = false;
   hasEdits = false;
-  devLog('Mode', 'designMode OFF', '', 'edit-mode');
+  devLog('Mode', 'designMode OFF, body non-editable', '', 'edit-mode');
   mutations = [];
   mutatedParents.clear();
   stopObserving();
