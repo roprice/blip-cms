@@ -64,6 +64,20 @@ blipTab.addEventListener('click', (e) => {
     sendToContent(action);
 });
 
+// In sidebar.js
+blipTab.addEventListener('mousedown', (e) => {
+    // Only initiate drag on the tab-name area, not controls
+    if (e.target.dataset?.action) return;
+
+    // Tell the main page to start dragging the iframe
+    window.parent.postMessage({
+        source: 'blip-sidebar',
+        action: 'dragStart',
+        offsetY: e.clientY
+    }, '*');
+
+    e.preventDefault();
+});
 // -------------------------------------------------------
 // Expanded view: button handlers
 // -------------------------------------------------------

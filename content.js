@@ -36,6 +36,13 @@ function injectSidebar() {
   sidebarFrame.src = chrome.runtime.getURL('sidebar.html');
   sidebarFrame.setAttribute('allowtransparency', 'true');
 
+  // RESTORE SAVED POSITION HERE
+  chrome.storage.local.get(['blipTabY'], (result) => {
+    if (result.blipTabY !== undefined) {
+      sidebarFrame.style.top = result.blipTabY + 'px';
+    }
+  });
+
   document.documentElement.appendChild(sidebarFrame);
   window.addEventListener('message', handleSidebarMessage);
 
@@ -54,6 +61,11 @@ function collapseSidebar() {
   if (sidebarFrame) {
     sidebarFrame.classList.add('blip-iframe-collapsed');
     sidebarFrame.classList.remove('blip-iframe-expanded');
+
+    // Restore dragged position when collapsed
+    chrome.storage.local.get(['blipTabY'], (result) => {
+      sidebarFrame.style.top = (result.blipTabY !== undefined ? result.blipTabY : 0) + 'px';
+    });
   }
   document.documentElement.classList.remove('blip-sidebar-open');
   sendToSidebar('collapse');
@@ -65,6 +77,7 @@ function expandSidebar() {
   if (sidebarFrame) {
     sidebarFrame.classList.add('blip-iframe-expanded');
     sidebarFrame.classList.remove('blip-iframe-collapsed');
+    sidebarFrame.style.top = '0px'; // Lock to top when expanded
   }
   document.documentElement.classList.add('blip-sidebar-open');
   sendToSidebar('expand');
@@ -119,6 +132,12 @@ function handleSidebarMessage(event) {
   const msg = event.data;
   if (msg.source !== 'blip-sidebar') return;
   switch (msg.action) {
+    case 'dragStart':
+      isDraggingSidebar = true;
+      dragOffsetY = msg.offsetY;
+      document.body.style.userSelect = 'none';
+      sidebarFrame.style.pointerEvents = 'none'; // <-- ADD THIS: Makes the iframe ignore the mouse
+      break;
     case 'ready': sendInitialDevLogs(); break;
     case 'startEdit': startEditSession(); break;
     case 'save': saveEdits(msg.commitToRepo !== false && !!resolvedFilePath); break;
@@ -270,6 +289,7 @@ async function startEditSession() {
     startObserving();
 
     document.designMode = 'on';
+
     document.documentElement.classList.add('blip-editing');
     isEditing = true;
 
@@ -643,3 +663,27 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
+
+let isDraggingSidebar = false;
+let dragOffsetY = 0;
+
+// Listeners for dragging the iframe
+document.addEventListener('mousemove', (e) => {
+  if (!isDraggingSidebar || !sidebarFrame) return;
+
+  // Calculate new position based on host mouse Y minus the initial click offset
+  const newTop = Math.max(0, Math.min(window.innerHeight - 48, e.clientY - dragOffsetY));
+  sidebarFrame.style.top = newTop + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (!isDraggingSidebar) return;
+  isDraggingSidebar = false;
+  document.body.style.userSelect = '';
+  if (sidebarFrame) sidebarFrame.style.pointerEvents = ''; // <-- ADD THIS: Restores iframe interaction
+
+  // Save the final position to local storage
+  const finalTop = parseInt(sidebarFrame.style.top || '0', 10);
+  chrome.storage.local.set({ blipTabY: finalTop });
+});

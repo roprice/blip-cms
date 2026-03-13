@@ -35,12 +35,17 @@
     }
 
     /* ===================== COLLAPSED TAB ===================== */
+
+
+
+
     .collapsed-view {
         padding: 0;
         width: fit-content;
     }
 
     .blip-tab {
+        pointer-events: auto;
         display: inline-flex;
         align-items: center;
         background: rgb(232 241 229);
@@ -55,10 +60,15 @@
         cursor: default;
         white-space: nowrap;
         overflow: hidden;
-        transition: width 0.2s ease, background 0.2s ease, border-color 0.2s ease;
         width: 38px;
-        position: relative;
-        margin-top: 10px;
+        position: absolute;
+        top: 10px;
+        left: 0;
+        cursor: grab;
+    }
+
+    .blip-tab:active {
+        cursor: grabbing;
     }
 
     .blip-tab:hover {

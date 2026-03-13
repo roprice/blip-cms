@@ -6,17 +6,23 @@
   left: 0;
   border: none;
   z-index: 2147483646;
-  transition: width 0.2s ease, height 0.2s ease, top 0.2s ease, box-shadow 0.2s ease;
+  /* Removed 'top 0.2s ease' to prevent drag lag */
+  transition: width 0.2s ease, height 0.2s ease, box-shadow 0.2s ease;
   background: transparent;
 }
 
 /* Collapsed: small iframe just for the tab widget */
-#blip-sidebar-frame.blip-iframe-collapsed {
-  top: 0;
-  width: 136px;
+iframe#blip-sidebar-frame.blip-iframe-collapsed {
+  padding: 0;
+  width: fit-content;
   height: 48px;
-  box-shadow: none;
+
 }
+
+iframe#blip-sidebar-frame.blip-iframe-collapsed body {
+  pointer-events: none;
+}
+
 
 /* Expanded: full sidebar */
 #blip-sidebar-frame.blip-iframe-expanded {
@@ -32,10 +38,3 @@ html.blip-sidebar-open body {
   transition: margin-left 0.2s ease;
   width: calc(100% - 300px);
 }
-
-/* 
-html.blip-sidebar-open body {
-  margin-left: var(--blip-sidebar-width, 0px) !important;
-  transition: margin-left 0.2s ease;
-  width: calc(100% - var(--blip-sidebar-width, 0px));
-} */
