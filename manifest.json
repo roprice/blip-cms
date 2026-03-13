@@ -7,6 +7,9 @@
     "storage",
     "activeTab"
   ],
+  "action": {
+    "default_title": "Toggle Blip"
+  },
   "host_permissions": [
     "https://api.github.com/*",
     "https://api.groq.com/*"

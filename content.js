@@ -688,3 +688,21 @@ document.addEventListener('mouseup', () => {
   const finalTop = parseInt(sidebarFrame.style.top || '0', 10);
   chrome.storage.local.set({ blipTabY: finalTop });
 });
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "toggle_blip_sidebar") {
+    // Find the iframe you injected (assuming you gave it an ID like 'blip-sidebar-iframe')
+    const sidebarIframe = document.getElementById('blip-sidebar-frame');
+
+    if (sidebarIframe) {
+      // Toggle its visibility
+      if (sidebarIframe.style.display === "none") {
+        sidebarIframe.style.display = "block"; // Or whatever your default display is
+      } else {
+        sidebarIframe.style.display = "none";
+      }
+    } else {
+      console.warn("Blip: Sidebar iframe not found on the page.");
+    }
+  }
+});

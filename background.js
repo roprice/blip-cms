@@ -154,3 +154,13 @@ async function llmRepairCall(llmConfig, systemPrompt, userPrompt) {
     usage: data.usage
   };
 }
+
+
+chrome.action.onClicked.addListener((tab) => {
+  // Send a message to the content scripts running in the current tab
+  if (tab.id) {
+    chrome.tabs.sendMessage(tab.id, { action: "toggle_blip_sidebar" }).catch(err => {
+      console.log("Blip: Cannot toggle on this page (likely a chrome:// restricted URL).");
+    });
+  }
+});
