@@ -55,11 +55,15 @@ The alternative to GitHub would be building a custom backend that stores file st
 
 Blip is designed for static, flat-file websites built with HTML-first frameworks and approaches:
 
-- Vanilla HTML/CSS/JS
-- jQuery-based sites
+- Vanilla HTML, CSS, and JS
+- Custom elements
+- Native HTML data attributes
+- Mavo
+- Hyperscript
 - Alpine.js
-- Astro
-- HTMX
+- Petite-Vue
+- Surreal
+- Lucia
 
 These share a common trait: content lives directly in HTML files in the DOM, not in databases, JSON files, or abstracted component state. This is what makes edit-in-place viable without a complex reconciliation layer.
 
