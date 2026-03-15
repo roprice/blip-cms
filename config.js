@@ -14,9 +14,16 @@ const BLIP_CONFIG = {
     startCollapsed: true
   },
 
+
+  // Pro mode
+  membership: {
+    foundingMember: false,
+    foundingVIP: false
+  },
+
   // Dev mode
   dev: {
-    enabled: true,
+    enabled: false,
     showNotifications: true
   },
 
@@ -25,11 +32,5 @@ const BLIP_CONFIG = {
     settleDelayMs: 150
   },
 
-  // LLM safety net (Groq)
-  llm: {
-    enabled: false,
-    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.3-70b-versatile',
-    apiKey: ''
-  }
+
 };

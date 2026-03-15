@@ -2,7 +2,7 @@
 // Blip content script - core: sidebar, edit session, observer, save, cancel
 
 // -------------------------------------------------------
-// Shared state (referenced by github.js, mapping.js, llm.js)
+// Shared state (referenced by github.js, mapping.js)
 // -------------------------------------------------------
 let githubConfig = null;
 let sidebarFrame = null;
@@ -427,22 +427,6 @@ async function saveEdits(commitToRepo = true) {
     let newContent = sourceContent;
     for (const rep of allReplacements) {
       newContent = newContent.substring(0, rep.sourceOffset) + rep.replacement + newContent.substring(rep.sourceOffset + rep.sourceLength);
-    }
-
-    // ---- LLM safety net (if enabled) ----
-    let usedLLM = false;
-    if (parentLevelChanges.length > 0 && BLIP_CONFIG.llm && BLIP_CONFIG.llm.enabled) {
-      const validation = validateHTML(newContent);
-      if (!validation.valid) {
-        devLog('Validation', 'structural issue detected, calling LLM...', 'error');
-        try {
-          newContent = await llmRepair(sourceContent, newContent, parentLevelChanges);
-          usedLLM = true;
-          devLog('LLM repair', 'applied', 'success');
-        } catch (llmErr) {
-          devLog('LLM repair', `failed: ${llmErr.message}`, 'error');
-        }
-      }
     }
 
     // ---- Commit to GitHub (only if commitToRepo is true) ----

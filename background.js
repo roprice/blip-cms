@@ -22,13 +22,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
-
-  if (message.type === 'LLM_REPAIR') {
-    llmRepairCall(message.llmConfig, message.systemPrompt, message.userPrompt)
-      .then(result => sendResponse({ success: true, data: result }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
 });
 
 async function githubListFiles(config) {

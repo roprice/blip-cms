@@ -11,8 +11,7 @@
     "default_title": "Toggle Blip"
   },
   "host_permissions": [
-    "https://api.github.com/*",
-    "https://api.groq.com/*"
+    "https://api.github.com/*"
   ],
   "content_scripts": [
     {
@@ -25,7 +24,6 @@
         "file-resolver.js",
         "mapping.js",
         "edit-history.js",
-        "llm.js",
         "content.js"
       ],
       "css": [
