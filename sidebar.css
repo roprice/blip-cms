@@ -65,14 +65,18 @@
         top: 10px;
         left: 0;
         cursor: grab;
+        height: 36px;
+        opacity: 0.8;
     }
 
     .blip-tab:active {
         cursor: grabbing;
+        opacity: 1;
     }
 
     .blip-tab:hover {
         width: fit-content;
+        opacity: 1;
     }
 
     .blip-tab .tab-name {
