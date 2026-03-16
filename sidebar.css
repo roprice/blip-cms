@@ -79,7 +79,11 @@
         flex-direction: column;
         position: absolute;
         bottom: 0;
-        padding-bottom: 20px;
+        margin-bottom: 20px;
+    }
+
+    #contact-support a {
+        color: var(--text-muted);
     }
 
     .blip-tab:hover {
@@ -307,7 +311,11 @@
         flex-direction: column;
         gap: 12px;
         overflow-y: auto;
+        position: relative;
     }
+
+
+
 
     .btn {
         width: 100%;
@@ -951,6 +959,11 @@
         transition: height 0.25s ease;
         height: 50vh;
         min-height: 0;
+
+    }
+
+    #devPanel {
+        display: none;
     }
 
     .dev-panel.collapsed {
