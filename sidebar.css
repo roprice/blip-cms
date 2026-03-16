@@ -1,27 +1,85 @@
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap');
 
+
+
+    /* ===================== FOUNDATIONS ===================== */
+
+    :root {
+        /* ---- Core palette ---- */
+        --bg: #fafcfa;
+        --surface: #ffffff;
+        --border: #d1d5db;
+        --text: #2d362b;
+        --text-muted: #6b7a68;
+
+        /* ---- Brand green ---- */
+        --accent: #16a34a;
+        --accent-hover: #15803d;
+        --accent-light: rgba(22, 163, 74, 0.08);
+        --accent-glow: rgba(22, 163, 74, 0.15);
+
+        /* ---- Pro tier (gold) ---- */
+        --pro-accent: #d4a017;
+        --pro-accent-hover: #b88a14;
+        --pro-accent-light: rgba(212, 160, 23, 0.08);
+        --pro-accent-glow: rgba(212, 160, 23, 0.15);
+
+        /* ---- Status ---- */
+        --success: #16a34a;
+        --error: #dc2626;
+
+        /* ---- Dark mode ---- */
+        --dark-bg: #111827;
+        --dark-surface: #1f2937;
+        --dark-border: #374151;
+        --dark-text: #f9fafb;
+        --dark-text-muted: #9ca3af;
+
+        /* ---- Typography ---- */
+        --sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        --mono: 'JetBrains Mono', monospace;
+
+
+
+
+
+    }
+
+    /* Target inputs, or add specific classes if you prefer */
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+        outline: none;
+        /* Removes default browser outline */
+        box-shadow: none;
+        /* Removes Pico.css thick blue ring */
+
+        /* Optional: Add your own custom border instead */
+        border: 1px solid var(--accent);
+    }
+
+    :root {
+        /* ---- Extension overrides ---- */
+        --bg: #eef3ed;
+        /* greenhouse green, the signature sidebar feel */
+
+        --settings-bg: #fafcfa;
+        --settings-border: rgb(195 226 187);
+
+        /* ---- Extension-only tokens ---- */
+        --dev-bg: #f1f1f1;
+        --dev-text: #8a9987;
+    }
+
     * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
     }
 
-    :root {
-        --bg: #eef3ed;
-        --border: #d1d5db;
-        --surface: #ffffff;
-        --text: #2d362b;
-        --text-muted: #6b7a68;
-        --accent: #16a34a;
-        --accent-hover: #15803d;
-        --success: #16a34a;
-        --error: #dc2626;
-        --dev-bg: #f1f1f1;
-        --dev-text: #8a9987;
-    }
 
     body {
-        font-family: 'DM Sans', -apple-system, sans-serif;
+        font-family: var(--sans);
         color: var(--text);
         height: 100vh;
         overflow: hidden;
@@ -33,6 +91,8 @@
     body.sidebar-expanded {
         background: var(--bg);
     }
+
+
 
     /* ===================== COLLAPSED TAB ===================== */
 
@@ -80,6 +140,15 @@
         position: absolute;
         bottom: 0;
         margin-bottom: 20px;
+        background: var(--bg);
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px dashed var(--bg);
+        display: none;
+    }
+
+    p.explaination {
+        font-size: 12px;
     }
 
     #contact-support a {
@@ -746,34 +815,268 @@
         padding: 4px 10px;
     }
 
+
+
+
+    .settings-panel {
+        background: var(--settings-bg);
+        border-top: 1px solid #dfe6de;
+    }
+
+    /* ===================== LICENSE PANEL ===================== */
+
+
+    .config-panel.collapsed .config-toggle svg:hover {
+        border-radius: 50%;
+    }
+
+    .license-panel {
+        padding: 20px 16px 60px 16px;
+        display: flex;
+        flex-direction: column;
+        transition: height 0.25s ease;
+    }
+
+    .license-panel.collapsed {
+        height: 50px;
+        overflow: hidden;
+    }
+
+    .license-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 16px 18px 16px;
+        flex-shrink: 0;
+    }
+
+    .license-label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--dev-text);
+    }
+
+    .license-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--dev-text);
+        padding: 2px;
+        display: flex;
+        align-items: center;
+        transition: opacity 0.15s;
+        line-height: 1;
+    }
+
+    .license-toggle:hover {
+        opacity: 0.7;
+    }
+
+    .license-toggle svg {
+        transition: transform 0.25s ease;
+    }
+
+    .license-panel.collapsed .license-toggle svg {
+        transform: rotate(180deg);
+    }
+
+    .license-body {
+        padding: 0 16px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .license-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+
+    .license-panel-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-transform: unset;
+    }
+
+    .license-active-badge {
+        font-size: 11px;
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    .license-activate-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .license-activate-row input {
+        flex: 1;
+        font-size: 11px;
+        padding: 9px 9px 8px 9px;
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        background: var(--surface);
+    }
+
+    .license-activate-row input:hover,
+    .license-activate-row input:focus,
+    .license-activate-row input:active {
+        /* background-color: #e8edea1a; */
+        border: 1px solid var(--accent) !important;
+    }
+
+    /* Single merged rule for license-buy-btn */
+    a.license-buy-btn {
+        text-align: center;
+        display: flex;
+        flex-direction: row-reverse;
+        color: var(--accent);
+        text-decoration: none;
+        margin: 18px auto 10px auto;
+        border-bottom: 1px solid var(--accent);
+        width: fit-content;
+        padding: 0 2px 0 1px;
+    }
+
+    .license-form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .license-form input:focus {
+        border-color: var(--accent);
+    }
+
+    .license-form input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .license-form-hint {
+        font-size: 10px;
+        color: var(--text-muted);
+        line-height: 1.4;
+    }
+
+    .license-form-hint a {
+        color: var(--accent);
+        text-decoration: none;
+    }
+
+    .license-form-hint a:hover {
+        text-decoration: underline;
+    }
+
+    .license-form-actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .license-form-actions button {
+        flex: 1;
+
+
+
+
+
+
+
+        transition: background 0.15s;
+    }
+
+    button#activateBtn {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px dashed var(--border);
+        border-radius: 11px;
+        background: none;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: 11px;
+        cursor: pointer;
+        transition: border-color 0.15s, color 0.15s;
+        text-align: center;
+    }
+
+    button#activateBtn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .license-btn-save {
+        background: var(--accent);
+        color: white;
+    }
+
+    .license-btn-save:hover {
+        background: var(--accent-hover);
+    }
+
+    .license-btn-cancel {
+        background: var(--surface);
+        color: var(--text-muted);
+        border: 1px solid var(--border) !important;
+    }
+
+    .license-btn-cancel:hover {
+        background: rgba(0, 0, 0, 0.04);
+    }
+
+    /* Single merged rule for license-error */
+    .license-error {
+        color: #e53e3e;
+        font-size: 11px;
+        margin-top: 6px;
+    }
+
+    .license-key-display {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+
+    .license-key-masked {
+        font-family: monospace;
+        font-size: 11px;
+    }
+
+
+
     /* ===================== CONFIG PANEL ===================== */
     .config-panel {
-        border-top: 1px solid rgba(0, 0, 0, 0.06);
-        background: var(--dev-bg);
         display: flex;
         flex-direction: column;
         transition: height 0.25s ease;
     }
 
     .config-panel.collapsed {
-        height: 33px;
+        height: 50px;
         overflow: hidden;
+    }
+
+    .collapsed .license-state {
+        display: none;
     }
 
     .config-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 8px 16px;
+        padding: 18px 16px 18px 16px;
         flex-shrink: 0;
     }
 
     .config-label {
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--dev-text);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-transform: unset;
     }
 
     .config-toggle {
@@ -801,7 +1104,7 @@
     }
 
     .config-body {
-        padding: 0 16px 12px;
+        padding: 0px 16px 28px 16px;
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -812,20 +1115,20 @@
         flex-direction: column;
         gap: 2px;
         padding: 8px 10px;
-        background: white;
-        border-radius: 6px;
-        border: 1px solid var(--border);
+        background: var(--bg);
+        border-radius: 11px;
+        margin-bottom: 8px;
     }
 
     .config-site-url {
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 600;
         color: var(--text);
     }
 
     .config-site-meta {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 9px;
+        font-size: 10px;
         color: var(--text-muted);
     }
 
@@ -835,8 +1138,8 @@
         background: none;
         border: none;
         cursor: pointer;
-        font-size: 10px;
-        color: var(--error);
+        font-size: 11px;
+        color: var(--text-muted);
         padding: 0;
         font-family: inherit;
         opacity: 0.7;
@@ -845,6 +1148,7 @@
 
     .config-delete-btn:hover {
         opacity: 1;
+        color: var(--error);
     }
 
     .config-empty {
@@ -857,7 +1161,7 @@
         width: 100%;
         padding: 7px 12px;
         border: 1px dashed var(--border);
-        border-radius: 6px;
+        border-radius: 9px;
         background: none;
         color: var(--text-muted);
         font-family: inherit;
@@ -876,13 +1180,14 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+        margin-top: 13px;
     }
 
     .config-form input {
         width: 100%;
         padding: 6px 8px;
         border: 1px solid var(--border);
-        border-radius: 5px;
+        border-radius: 8px;
         font-family: inherit;
         font-size: 11px;
         color: var(--text);
@@ -922,7 +1227,7 @@
     .config-form-actions button {
         flex: 1;
         padding: 6px 10px;
-        border-radius: 5px;
+        border-radius: 11px;
         font-family: inherit;
         font-size: 11px;
         font-weight: 500;

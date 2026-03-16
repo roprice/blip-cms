@@ -44,6 +44,19 @@ const collapsedView = document.getElementById('collapsedView');
 const expandedView = document.getElementById('expandedView');
 const blipTab = document.getElementById('blipTab');
 
+
+
+// License panel elements
+const licensePanel = document.getElementById('licensePanel');
+const unlicensedState = document.getElementById('unlicensedState');
+const memberState = document.getElementById('memberState');
+const vipState = document.getElementById('vipState');
+const licenseActiveBadge = document.getElementById('licenseActiveBadge');
+const licenseKeyInput = document.getElementById('licenseKeyInput');
+const activateBtn = document.getElementById('activateBtn');
+const activateError = document.getElementById('activateError');
+const maskedKeyDisplay = document.getElementById('maskedKeyDisplay');
+
 // -------------------------------------------------------
 // Communication with content script
 // -------------------------------------------------------
@@ -555,6 +568,78 @@ window.addEventListener('message', (event) => {
     }
 });
 
+
+
+// -------------------------------------------------------
+// License panel: set UI state based on stored membership
+// -------------------------------------------------------
+function setLicenseState(membership, licenseKey) {
+    // Hide all states first
+    unlicensedState.classList.add('hidden');
+    memberState.classList.add('hidden');
+    vipState.classList.add('hidden');
+
+    if (membership && membership.foundingVIP) {
+        // VIP: collapsed panel, just show the active badge
+        licenseActiveBadge.classList.remove('hidden');
+        vipState.classList.remove('hidden');
+        configPanel.style.display = 'flex';
+
+    } else if (membership && membership.foundingMember) {
+        // Member: show key (masked), upgrade button
+        licenseActiveBadge.classList.remove('hidden');
+        memberState.classList.remove('hidden');
+        if (licenseKey) {
+            // Show first 8 chars then mask the rest
+            maskedKeyDisplay.textContent = licenseKey.substring(0, 8) + '••••••••••••••••••••';
+        }
+        configPanel.style.display = 'flex';
+
+    } else {
+        // Unlicensed: show buy + activate
+        unlicensedState.classList.remove('hidden');
+    }
+}
+
+
+// -------------------------------------------------------
+// License activation
+// -------------------------------------------------------
+activateBtn.addEventListener('click', async () => {
+    const key = licenseKeyInput.value.trim();
+    if (!key) return;
+
+    activateBtn.disabled = true;
+    activateBtn.textContent = 'Checking...';
+    activateError.classList.add('hidden');
+
+    try {
+        const res = await fetch('https://my.remaphq.com/webhook/validate-blip-license', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key })
+        });
+        const data = await res.json();
+
+        if (data.valid) {
+            // Write tier and key to storage
+            const membership = { [data.tier]: true };
+            chrome.storage.local.set({ blipMembership: membership, blipLicenseKey: key });
+            setLicenseState(membership, key);
+        } else {
+            activateError.classList.remove('hidden');
+        }
+    } catch (err) {
+        activateError.textContent = 'Could not connect. Check your internet and try again.';
+        activateError.classList.remove('hidden');
+    }
+
+    activateBtn.disabled = false;
+    activateBtn.textContent = 'Activate';
+});
+
+
+
 // Init: load saved sites into config panel
 renderSavedSites();
 
@@ -582,5 +667,17 @@ if (clearHistoryBtn) {
     });
 }
 
+
+// Load license state on init
+chrome.storage.local.get(['blipMembership', 'blipLicenseKey'], (result) => {
+    setLicenseState(result.blipMembership || null, result.blipLicenseKey || null);
+});
+
+document.getElementById('licenseToggle').addEventListener('click', () => {
+    document.getElementById('licensePanel').classList.toggle('collapsed');
+});
+
 // Tell the content script we're ready
 sendToContent('ready');
+
+

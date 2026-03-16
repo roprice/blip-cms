@@ -100,17 +100,22 @@
 
 
 
-      <div id="contact-support">Need help? <a href="mailto:hello@blipcms.com">Contact support</a></div>
+      <div id="contact-support">Need help? <a class="support" href="mailto:support@blipcms.com">Contact support</a>
+      </div>
     </div>
 
-    <!-- Config panel -->
-    <div class="config-panel collapsed" id="configPanel">
+
+
+
+
+    <!-- Config panel (Manage sites) -->
+    <div class="config-panel collapsed settings-panel" id="configPanel">
       <div class="config-header">
         <span class="config-label">Manage sites</span>
         <button class="config-toggle" id="configToggle" title="Collapse/expand">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"
             stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="2,4 6,8 10,4" />
+            <polyline points="2,5 7,9 12,5" />
           </svg>
         </button>
       </div>
@@ -139,6 +144,52 @@
         </div>
       </div>
     </div>
+
+
+
+    <!-- License panel -->
+    <div id="licensePanel" class="license-panel settings-panel">
+      <div class="license-panel-header">
+        <span class="license-panel-label">Blip Pro</span>
+        <button class="license-toggle" id="licenseToggle" title="Collapse/expand">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="2,5 7,9 12,5" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Unlicensed state -->
+      <div id="unlicensedState" class="license-state">
+        <p class="explaination">Connect repos, save edits <b>live</b></p>
+        <div class="license-activate-row">
+          <input id="licenseKeyInput" type="text" placeholder="Enter license key.." />
+          <button id="activateBtn" class="btn btn-secondary">Activate Pro</button>
+        </div>
+        <p id="activateError" class="license-error hidden">Invalid key. Please try again - <a class="support"
+            href="mailto:support@blipcms.com">need help?</a></p>
+
+        <a href="https://buy.stripe.com/00w14od4d56Sgjo7vCgw00l" target="_blank" class="license-buy-btn">Upgrade to
+          Pro</a>
+      </div>
+
+      <!-- Founding Member state (key shown, upgrade CTA) -->
+      <div id="memberState" class="license-state hidden">
+        <div class="license-key-display">
+          <span class="license-key-label">Your key:</span>
+          <span id="maskedKeyDisplay" class="license-key-masked"></span>
+        </div>
+        <a href="https://buy.stripe.com/4gM00kc097f0c38bLSgw00m" target="_blank" class="license-buy-btn">Upgrade to
+          VIP</a> (unlimited sites)
+      </div>
+
+      <!-- Founding VIP state (collapsed, just the badge) -->
+      <div id="vipState" class="license-state hidden"></div>
+    </div>
+
+
+
+
 
     <!-- Dev panel -->
     <div class="dev-panel collapsed" id="devPanel">
