@@ -460,8 +460,7 @@ async function saveEdits(commitToRepo = true) {
           : `\u2717 SHA mismatch! local=${sourceSHA.substring(0, 7)} server=${result.sha.substring(0, 7)}`,
         stateUpdated ? 'success' : 'error', 'tx-state'
       );
-      devLog('Commit', result.commitSha.substring(0, 7) + (usedLLM ? ' (LLM-repaired)' : ''), 'success', 'commit-status');
-
+      devLog('Commit', result.commitSha.substring(0, 7), 'success', 'commit-status');
       buildTextNodeMap(document.body, sourceContent, true);
     } else {
       // Diff-only save: update source content locally but don't push
