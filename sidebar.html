@@ -171,7 +171,10 @@
     <!-- License panel -->
     <div id="licensePanel" class="license-panel settings-panel">
       <div class="license-panel-header">
-        <span class="license-panel-label">Blip Pro</span>
+        <span class="license-panel-label">Blip Pro<span id="licenseActiveBadge" class="license-active-badge"><span
+              class="material-symbols-outlined">
+              lock
+            </span></span></span>
         <button class="license-toggle" id="licenseToggle" title="Collapse/expand">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -180,33 +183,37 @@
         </button>
         <span id="licenseActiveBadge" class="license-active-badge hidden"></span>
       </div>
+      <div class="license-panel-body">
 
-      <!-- Unlicensed state -->
-      <div id="unlicensedState" class="license-state">
-        <p class="explaination">Connect repos, save edits <b>live</b></p>
-        <div class="license-activate-row">
-          <input id="licenseKeyInput" type="text" placeholder="Enter license key.." />
-          <button id="activateBtn" class="btn btn-secondary">Activate Pro</button>
+        <!-- Unlicensed state - Freemium -->
+        <div id="unlicensedState" class="license-state">
+          <p class="explaination">Connect repos, save edits <b>live</b></p>
+          <div class="license-activate-row">
+            <input id="licenseKeyInput" type="text" placeholder="Enter license key.." />
+            <button id="activateBtn" class="btn btn-secondary">Activate Pro</button>
+          </div>
+          <p id="activateError" class="license-error hidden">Invalid key. Please try again - <a class="support"
+              href="mailto:support@blipcms.com">need help?</a></p>
+
+          <a href="https://buy.stripe.com/00w14od4d56Sgjo7vCgw00l" target="_blank" class="license-buy-btn">Upgrade to
+            Pro</a>
         </div>
-        <p id="activateError" class="license-error hidden">Invalid key. Please try again - <a class="support"
-            href="mailto:support@blipcms.com">need help?</a></p>
 
-        <a href="https://buy.stripe.com/00w14od4d56Sgjo7vCgw00l" target="_blank" class="license-buy-btn">Upgrade to
-          Pro</a>
-      </div>
-
-      <!-- Founding Member state (key shown, upgrade CTA) -->
-      <div id="memberState" class="license-state hidden">
-        <div class="license-key-display">
-          <span class="license-key-label">Your key:</span>
-          <span id="maskedKeyDisplay" class="license-key-masked"></span>
+        <!-- Founding Member state (key shown, upgrade CTA) - Pro, Founding Member -->
+        <div id="memberState" class="license-state hidden">
+          <div class="license-key-display">
+            <span class="license-key-label">Your key:</span>
+            <span id="maskedKeyDisplay" class="license-key-masked"></span>
+          </div>
+          <a href="https://buy.stripe.com/4gM00kc097f0c38bLSgw00m" target="_blank" class="license-buy-btn">Upgrade to
+            VIP</a>
+          <div class="license-upgrade-info">(manage unlimited sites)</div>
         </div>
-        <a href="https://buy.stripe.com/4gM00kc097f0c38bLSgw00m" target="_blank" class="license-buy-btn">Upgrade to
-          VIP</a> (unlimited sites)
-      </div>
 
-      <!-- Founding VIP state (collapsed, just the badge) -->
-      <div id="vipState" class="license-state hidden"></div>
+        <!-- Founding VIP state (collapsed, just the badge) - Pro, Founding VIP -->
+        <div id="vipState" class="license-state hidden"></div>
+
+      </div>
     </div>
 
 

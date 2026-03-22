@@ -27,14 +27,14 @@ iframe#blip-sidebar-frame.blip-iframe-collapsed body {
 /* Expanded: full sidebar */
 #blip-sidebar-frame.blip-iframe-expanded {
   top: 0;
-  width: 300px;
+  width: 350px;
   height: 100vh;
   border-right: 1px solid rgb(195 226 187)
 }
 
 /* Page shift when sidebar is expanded*/
 html.blip-sidebar-open body {
-  margin-left: 300px !important;
+  margin-left: 350px !important;
   transition: margin-left 0.2s ease;
-  width: calc(100% - 300px);
+  width: calc(100% - 350px);
 }

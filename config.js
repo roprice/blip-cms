@@ -13,7 +13,7 @@ const BLIP_CONFIG = {
 
   // Sidebar settings
   sidebar: {
-    widthPx: 300,
+    widthPx: 350,
     startCollapsed: true
   },
 

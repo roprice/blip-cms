@@ -831,7 +831,7 @@ span.label-save {
 }
 
 .license-panel {
-    padding: 20px 16px 60px 16px;
+
     display: flex;
     flex-direction: column;
     transition: height 0.25s ease;
@@ -856,6 +856,10 @@ span.label-save {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--dev-text);
+}
+
+.license-panel-body {
+    padding: 0px 16px 28px 16px;
 }
 
 .license-toggle {
@@ -894,6 +898,7 @@ span.label-save {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 10px;
+    padding: 18px 16px 18px 16px;
 }
 
 .license-panel-label {
@@ -903,10 +908,12 @@ span.label-save {
     text-transform: unset;
 }
 
-.license-active-badge {
-    font-size: 11px;
-    color: var(--accent);
-    font-weight: 600;
+.license-active-badge .material-symbols-outlined {
+    font-size: 14px;
+    position: relative;
+    top: 2px;
+    left: 2px;
+    color: var(--text-muted);
 }
 
 .license-activate-row {
@@ -1253,6 +1260,15 @@ button#activateBtn:hover {
 
 .config-btn-cancel:hover {
     background: rgba(0, 0, 0, 0.04);
+}
+
+
+
+
+.license-upgrade-info {
+    text-align: center;
+    font-size: var(--sm);
+    color: var(--text-muted);
 }
 
 /* ===================== DEV PANEL ===================== */

@@ -7,9 +7,9 @@
 
 Blip is a Chrome extension for editing website content in place, directly on the live page.
 
-For **pro users** with GitHub-connected sites, Blip lets you edit your live website and commit changes without ever leaving the page.
+For **pro users** with GitHub-connected sites, Blip lets you edit your live website and commit changes without ever leaving the page. Pro users can also edit local files (via the File System Access API) and save changes directly to disk.
 
-For **everyone else**, Blip lets you activate designMode on any webpage, make edits, and save a structured before/after diff to the sidebar. These diffs can be copied, shared, or (in a future version) emailed directly from Blip. No GitHub account required.
+For **everyone else**, Blip lets you activate designMode on any webpage, make edits, and save a structured before/after diff to the sidebar. These diffs can be copied, shared, or emailed. No GitHub account required.
 
 Blip exists because the current workflow for making small edits to a static website is absurdly friction-heavy: open VS Code, find the file, find the line, make the edit, save, commit, push, wait for deploy, check the live site. This kills flow state and discourages the kind of rapid, iterative refinement that makes websites great.
 
@@ -43,13 +43,11 @@ GitHub is central to Blip's architecture. The reasons are:
 
 3. **Deployment pipeline.** Most static sites already deploy from GitHub via Netlify, Vercel, Cloudflare Pages, or GitHub Pages. By committing to GitHub, Blip triggers the existing deploy pipeline automatically. No additional infrastructure needed.
 
-4. **Authentication and permissions.** GitHub OAuth provides identity, access control, and repo permissions out of the box. Blip does not need its own auth system or user database.
+4. **Authentication and permissions.** GitHub personal access tokens provide identity, access control, and repo permissions. Blip does not need its own auth system or user database.
 
-5. **No custom backend required.** Blip can operate as a pure client-side Chrome extension that talks directly to GitHub's API. There is no Blip server, no database, no infrastructure to maintain (at least in the alpha/personal-use version).
+5. **No custom backend required.** Blip operates as a pure client-side Chrome extension that talks directly to GitHub's API. There is no Blip server, no database, no infrastructure to maintain for the core editing flow.
 
 6. **SHA-based consistency.** GitHub's Contents API uses SHA hashes to ensure atomic commits. Blip always knows exactly which version of the file it's working against, preventing silent overwrites or merge conflicts.
-
-The alternative to GitHub would be building a custom backend that stores file state, manages versions, and handles deployment. That is orders of magnitude more complex and provides less functionality than what GitHub already offers.
 
 ## Target platforms
 
@@ -74,13 +72,35 @@ React, Next.js, Vue, Svelte, and similar component-based frameworks are explicit
 ### Chrome extension structure
 
 - `manifest.json` - extension configuration, permissions, URL matching
-- `content.js` - injected into matched pages; manages the iframe, edit session, design mode, DOM observation, multi-file resolution
+- `content.js` - injected into matched pages; manages the iframe, edit session, design mode, DOM observation, multi-file resolution, diff strategy routing
 - `content.css` - injected into matched pages; iframe positioning and page margin shift
-- `config.js` - injected into matched pages; all configuration (GitHub, file resolution, sidebar, observer settings)
+- `config.js` - injected into matched pages; all configuration (file resolution, sidebar, observer settings, membership tiers)
 - `edit-history.js` - injected into matched pages; diff formatting and accumulation for the "your edits" textarea
+- `text-diff.js` - injected into matched pages; text-diff strategy for plain-text files and fallback for DOM engine misses
+- `local-fs.js` - injected into matched pages; File System Access API module for local file editing (Pro feature), including init, grant, and save flows
+- `github.js` - injected into matched pages; GitHub API communication via background service worker
+- `file-resolver.js` - injected into matched pages; URL-to-file resolution, site config loading from storage
+- `mapping.js` - injected into matched pages; dual-track DOM text node mapping (simple text nodes + mixed-content parents)
 - `background.js` - service worker; handles GitHub API communication (fetch, commit, file listing)
 - `sidebar.html` - the sidebar UI (loaded inside the injected iframe); contains both collapsed tab widget and expanded sidebar views
-- `sidebar.js` - sidebar logic; view toggling, tab state, file list, dev panel, edit history display
+- `sidebar.js` - sidebar logic; view toggling, tab state, file list navigation, license management, dev panel, edit history display
+- `sidebar.css` - sidebar styling; greenhouse glass aesthetic, settings panels, local file UI
+
+### File extension categories
+
+```
+files: {
+  editableExtensions: ['.html', '.htm', '.md'],
+  localEditableExtensions: ['.html', '.htm', '.md', '.txt'],
+  devExtensions: ['.php', '.asp', '.aspx', '.txt', '.css', '.js', '.json', '.xml', '.svg', '.py', '.ts', '.tsx', '.jsx'],
+  excludePatterns: ['template', '.git', '.vscode', '.github', '.blip', '.claude', '.gemini', '.agent', '.antigravity', '.codex', '.copilot', '.cursor', '.ref', 'node_modules', 'dist']
+}
+```
+
+- `editableExtensions` - shown in file lists and resolved by default for online editing
+- `localEditableExtensions` - resolved for local file editing (Pro, file:// pages)
+- `devExtensions` - resolved only when developer mode is enabled (future toggle)
+- `excludePatterns` - filtered out of repo file listings
 
 ### Sidebar
 
@@ -116,12 +136,32 @@ This architecture solves a critical problem: `document.designMode = 'on'` on the
 3. User can immediately edit and capture diffs on any site.
 
 ### Pro
-1. User opens the sidebar and "adds a site" in Manage Sites by entering a URL and GitHub repo configuration.
-2. User visits a configured site. The file list shows with a `sync` icon confirming the connection.
-3. Saves commit directly to GitHub. The "save to repo" checkbox defaults to checked.
+1. User purchases a license via Stripe and receives a license key by email.
+2. User enters the key in the Blip Pro panel in the sidebar and clicks Activate.
+3. The extension validates the key against an n8n webhook (`validate-blip-license`).
+4. On success, the membership tier is stored in `chrome.storage.local`.
+5. User adds a site in Manage Sites by entering a URL and GitHub repo configuration.
+6. User visits a configured site. The file list shows with a `sync` icon confirming the connection. Files in the list are clickable for navigation.
+7. Saves commit directly to GitHub. The "save to repo" checkbox defaults to checked.
 
+### Membership tiers
+
+- **Founding Member** - one connected site, GitHub commit, local file editing
+- **Founding VIP** - unlimited connected sites, all Founding Member features
 
 ## Core editing mechanism
+
+### Diff strategy routing
+
+Blip uses two diff strategies, automatically selected at edit-start time based on page structure:
+
+1. **DOM-mapping strategy** - for pages with meaningful HTML structure (multiple elements, rich DOM tree). This is the primary strategy for `.html` and `.htm` files on live sites. Uses dual-track text node mapping with character-offset precision.
+
+2. **Text-diff strategy** - for pages rendered as plain text by the browser (single `<pre>` element wrapping file contents). This is the primary strategy for `.md`, `.txt`, `.json`, `.xml`, and other non-HTML files. Uses line-by-line text comparison with context-aware snippet generation.
+
+The text-diff strategy also serves as a fallback: if the DOM-mapping engine finds zero changes but the mutation observer detected edits, the text-diff strategy is tried automatically. This catches edge cases where `designMode` interactions don't produce mappable mutations.
+
+Detection is automatic: `isPlainTextPage()` checks whether the document body contains a single `<pre>` element (Chrome's default rendering for raw text files). No user configuration needed.
 
 ### Pro mode (GitHub-connected sites)
 
@@ -130,18 +170,18 @@ This architecture solves a critical problem: `document.designMode = 'on'` on the
 3. Blip prefetches the resolved file's content and SHA from GitHub immediately (before the user clicks Edit).
 4. Sidebar appears in collapsed state (floating tab widget).
 5. User clicks "Edit" (via the tab widget or the expanded sidebar).
-6. Blip uses the prefetched source (or fetches if not yet available). It parses the source with `DOMParser` to create a clean source DOM. **[Dev notification: display parse status and node count.]**
-7. Blip walks the live DOM, building a dual-track map: simple text nodes to character offsets, and mixed-content parents to innerHTML regions.
-8. Blip attaches a `MutationObserver` watching both `characterData` and `childList` mutations.
-9. `document.designMode` is enabled on the page.
-10. User edits content directly on the page.
-11. User clicks "Save."
-12. Blip collects observed mutations and applies targeted replacements: character-offset replacements for simple text nodes, innerHTML comparison for mixed-content parents.
-13. Blip generates a structured before/after diff entry and appends it to the "your edits" textarea in the sidebar.
-14. If the "save to repo" checkbox is checked (default for connected sites), Blip commits the modified file to GitHub via the Contents API using the prefetched SHA.
-15. If LLM is enabled and structural validation detects corruption, Blip calls Groq for syntax repair before committing.
+6. Blip uses the prefetched source (or fetches if not yet available). It parses the source with `DOMParser` to create a clean source DOM.
+7. Blip selects the diff strategy based on page structure and snapshots the text content.
+8. Blip walks the live DOM, building a dual-track map: simple text nodes to character offsets, and mixed-content parents to innerHTML regions.
+9. Blip attaches a `MutationObserver` watching both `characterData` and `childList` mutations.
+10. `document.designMode` is enabled on the page.
+11. User edits content directly on the page.
+12. User clicks "Save."
+13. Blip collects observed mutations and applies targeted replacements using the active diff strategy.
+14. Blip generates a structured before/after diff entry and appends it to the "your edits" textarea in the sidebar.
+15. If the "save to repo" checkbox is checked (default for connected sites), Blip commits the modified file to GitHub via the Contents API using the prefetched SHA.
 16. GitHub returns a response containing the new SHA.
-17. Blip updates the local SHA immediately, priming the system for the next edit. **[Dev notification: transaction log with timestamps, payload SHA, response status, returned SHA, state confirmation.]**
+17. Blip updates the local SHA immediately, priming the system for the next edit.
 18. The commit triggers the existing deployment pipeline (Netlify, Vercel, etc.).
 19. User sees "Saved" confirmation.
 20. UI returns to default state.
@@ -152,24 +192,45 @@ This architecture solves a critical problem: `document.designMode = 'on'` on the
 2. Blip injects the sidebar iframe. No GitHub fetch occurs.
 3. User clicks "Edit."
 4. Blip captures the live DOM's `outerHTML` as the local baseline for diffing.
-5. Blip walks the live DOM and builds the same dual-track text node map against the local baseline.
-6. `document.designMode` is enabled. User edits content directly.
-7. User clicks "Save."
-8. Blip generates a structured before/after diff and appends it to the "your edits" textarea.
-9. No GitHub commit occurs. The diff is the deliverable.
-10. User can copy the accumulated diffs via the copy button, or (future) email them.
+5. Blip selects the diff strategy and snapshots the text content.
+6. Blip walks the live DOM and builds the same dual-track text node map against the local baseline.
+7. `document.designMode` is enabled. User edits content directly.
+8. User clicks "Save."
+9. Blip generates a structured before/after diff and appends it to the "your edits" textarea.
+10. No GitHub commit occurs. The diff is the deliverable.
+11. User sees "Saved to Blip" confirmation.
+12. User can copy the accumulated diffs via the copy button, or share/email them.
 
 The sidebar shows a prompt encouraging unconnected users to link their site to a GitHub repo for direct saving.
 
-### Diff strategy: dual-track mapping
+### Local file editing (Pro feature)
 
-This is the core technical mechanism of Blip. The guiding principle is: **never serialize and replace the entire file from the DOM.**
+Local file editing allows Pro users to edit files opened via `file:///` URLs and save changes directly to disk using the browser's File System Access API.
+
+1. User opens a local file in Chrome (e.g., `file:///Users/rdg/Claude/CLAUDE.md`).
+2. Blip detects the `file:///` protocol and checks for a Pro license in `chrome.storage.local`.
+3. If Pro, Blip attempts to restore a previously granted `FileSystemDirectoryHandle` from IndexedDB.
+4. If no stored handle, the sidebar shows "Local file detected" with a "Grant folder access" button.
+5. User clicks the button. Chrome's native directory picker opens. User selects the folder containing the file.
+6. Blip stores the `FileSystemDirectoryHandle` in IndexedDB (keyed by directory path). This persists across sessions.
+7. Blip parses the filename from the URL, reads the file content via the stored handle, and sets it as `sourceContent`.
+8. User clicks Edit. The text-diff strategy activates (for `.md`, `.txt` files) or DOM-mapping (for `.html` files).
+9. User edits and clicks Save. Blip writes the modified content back to the local file via `FileSystemFileHandle.createWritable()`.
+10. Subsequent files in the same folder require zero permission prompts.
+
+**Why IndexedDB for handle storage:** `chrome.storage.local` cannot hold `FileSystemDirectoryHandle` objects because they are structured-cloneable but not JSON-serializable. IndexedDB handles this natively.
+
+**Folder picker limitation:** Chrome blocks `showDirectoryPicker()` for certain sensitive directories (home root, system folders). Users must select a subfolder, not `~/`.
+
+### Diff strategy: DOM-mapping (primary, for HTML pages)
+
+This is the core technical mechanism for HTML editing. The guiding principle is: **never serialize and replace the entire file from the DOM.**
 
 The browser's DOM serializer does not preserve the original file's formatting. Frameworks like Alpine and HTMX mutate the DOM at runtime. Saving raw `outerHTML` would introduce formatting noise into every commit and could bake in runtime-generated attributes and state.
 
-#### Design principle: deterministic solution
+#### Design principle: deterministic first
 
-Blip's architecture prioritizes speed and predictability. Every edit should be processed deterministically using JavaScript wherever possible. This principle ensures sub-second save times for the vast majority of edits. Blip does not use AI.
+Blip's architecture prioritizes speed and predictability. Every edit should be processed deterministically using JavaScript wherever possible. This principle ensures sub-second save times for the vast majority of edits.
 
 #### Track 1: simple text node mapping (fast path)
 
@@ -198,16 +259,17 @@ Instead, Blip maps at the parent element level:
 
 This approach handles all the inline element edge cases: editing text before/after/across `<span>`, `<strong>`, `<em>`, `<a>`, and other inline elements. It also handles the user creating new inline elements via keyboard shortcuts.
 
-#### LLM safety net (Groq)
+### Diff strategy: text-diff (for plain-text files and fallback)
 
-After applying all replacements (both tracks), if any parent-level changes were made, Blip runs a quick structural validation:
+For files that the browser renders as plain text (inside a single `<pre>` element), the DOM-mapping strategy is ineffective because there is no meaningful DOM tree to map against. The text-diff strategy handles these cases:
 
-- Regex patterns check for common corruption (e.g., `text/p>`, mismatched close tags).
-- If corruption is detected and the LLM is enabled in config, Blip sends the original and corrupted fragments to Groq (Llama 3.3 70B via background service worker) with instructions to fix syntax only and preserve all content changes.
-- The LLM call routes through `background.js` (required for Manifest V3 CORS).
-- The dev panel indicates whether LLM repair was used and shows token counts.
+1. At edit-start, `snapshotText()` captures the full text content of the page.
+2. On save, `getCurrentText()` reads the current text content.
+3. `computeLineDiff()` performs a line-by-line comparison with sync-point detection (up to 50-line lookahead).
+4. Changed regions are formatted as before/after snippet pairs with one line of context above, compatible with the same `formatDiffEntry()` output format used by the DOM-mapping strategy.
+5. For local files, the new text content is written directly to disk. For online editing, the diff is captured but not committed to GitHub (to preserve HTML structure that may wrap the text).
 
-The LLM config is disabled by default. To enable: set `llm.enabled: true` and provide a Groq API key in `config.js`.
+The text-diff strategy also activates as a fallback when the DOM-mapping engine finds zero changes but the mutation observer detected edits (`hasEdits === true`). This catches edge cases in `designMode` interaction that don't produce mappable mutations.
 
 **Why this approach over alternatives:**
 
@@ -220,18 +282,18 @@ The LLM config is disabled by default. To enable: set `llm.enabled: true` and pr
 
 The MutationObserver watches for both `characterData` (text changes) and `childList` (structural changes) mutations. It is configured with `subtree: true` to capture changes anywhere in the document body.
 
-**User interaction filtering:** Removed. During `designMode`, all characterData mutations are user-initiated. The previous approach of filtering by tracked user interactions caused false negatives (T1.3.A: "no changes detected" on valid edits). The `settleDelayMs` (150ms) after enabling designMode is sufficient to filter out browser normalization mutations.
+**User interaction filtering:** Removed. During `designMode`, all characterData mutations are user-initiated. The previous approach of filtering by tracked user interactions caused false negatives ("no changes detected" on valid edits). The `settleDelayMs` (150ms) after enabling designMode is sufficient to filter out browser normalization mutations.
 
 **Known risks and mitigations:**
 
 1. **Framework-initiated mutations.** Alpine, HTMX, and other frameworks react to user interactions. Clicking into a text node could trigger a binding that changes other text on the page.
-   - *Mitigation:* The 150ms settle delay filters initial framework reactions. For ongoing framework mutations, the parent-level innerHTML comparison naturally captures only the net change (including framework mutations, which are minimal for text-only edits). Future: scope observation to content areas, excluding known dynamic containers.
+   - *Mitigation:* The 150ms settle delay filters initial framework reactions. For ongoing framework mutations, the parent-level innerHTML comparison naturally captures only the net change. Future: scope observation to content areas, excluding known dynamic containers.
 
 2. **Browser normalization on designMode activation.** When `designMode` is enabled, the browser may normalize the DOM: collapsing whitespace, wrapping bare text nodes in elements.
    - *Mitigation:* Observer starts after a configurable delay (`settleDelayMs`, default 150ms). Mutations during this window are not captured.
 
-3. **Copy-paste injecting structural HTML.** When a user pastes formatted text, the browser may insert elements with inline styles rather than plain text. This is a structural mutation, not a `characterData` mutation.
-   - *Mitigation:* Intercept paste events and force plain-text paste (`e.preventDefault()` + `document.execCommand('insertText', false, plainText)` or equivalent).
+3. **Copy-paste injecting structural HTML.** When a user pastes formatted text, the browser may insert elements with inline styles rather than plain text.
+   - *Mitigation:* Paste events are intercepted and forced to plain-text paste via `e.preventDefault()` + manual text node insertion.
 
 4. **Dynamic content generating mutations.** If the page has live clocks, animated counters, HTMX polling, or other dynamic elements, these generate mutations during the edit session.
    - *Mitigation:* Only observe `characterData` mutation type. Additionally, scope observation to the main content area if possible, excluding known dynamic widget containers.
@@ -247,28 +309,44 @@ The sidebar displays the Blip branding, a single "Edit" button, and a persistent
 ### Editing state
 
 - The "Edit" button changes to display "Editing" (visually distinct, indicating active mode).
+- For local files (Pro), a "Saving to [filename]" indicator appears.
 - A "Cancel" button appears. Clicking it discards all edits, disables designMode, restores the original DOM state, and returns to the default state.
 - A "Save" button appears. Clicking it triggers the diff-and-commit flow.
 - `document.designMode = 'on'` is active on the page.
 
 ### Save confirmation
 
-After a successful commit, the sidebar displays a "Saved" notification. The UI returns to the default state.
+After a successful save, the sidebar displays a contextual notification:
+- "Saved" for Pro GitHub commits
+- "Saved to file" for local file saves
+- "Saved to Blip" for freemium diff captures
+
+The UI returns to the default state.
 
 ### Error state
 
 If the GitHub commit fails (network error, auth expiry, merge conflict, SHA mismatch), the sidebar displays a clear error message. The user's edits remain in the DOM so nothing is lost. They can retry or copy their changes manually.
 
-### Dev notifications (alpha only)
+For SHA conflicts (409), Blip automatically re-fetches the latest version from GitHub and reports the sync status.
 
-During the alpha version, the sidebar displays diagnostic information for development and debugging purposes:
+### Local file states
 
-- On source fetch: SHA, file size, and fetch status
-- On DOM parse: parse status and node count
-- On save: new SHA returned from GitHub, confirming the round-trip
-- On error: full error details from the GitHub API response
+- **Grant access prompt** - shown on `file:///` pages for Pro users without stored folder access. Displays the detected filename and a "Grant folder access" button.
+- **Ready** - folder access granted, file loaded. Edit button enabled, "Saving to [filename]" shown during edit.
+- **Not Pro** - `file:///` page without a Pro license. Falls through to freemium mode (edit + accumulate diffs, no save to disk).
 
-These notifications are behind a dev-mode flag so they can be easily removed or hidden in the production version.
+### Dev panel
+
+The dev panel is a diagnostic tool that shows real-time information about the editing session: file resolution, source loading, diff strategy selection, mutation tracking, save transactions, and error details. It is toggled via `chrome.storage.local`:
+
+```js
+// Enable
+chrome.storage.local.set({ blipDev: true });
+// Disable
+chrome.storage.local.set({ blipDev: false });
+```
+
+The `dev.enabled` flag in `config.js` controls whether dev log messages are sent to the sidebar. Both must be true for the panel to show logs.
 
 ## UI design
 
@@ -282,34 +360,37 @@ The sidebar is fixed at 300px wide. It is injected as an iframe on the left side
 - Primary action: Edit button (large, prominent)
 - Notifications area
 - Your edits: diff accumulator textarea with copy button (always visible, shows placeholder when empty)
-- File list: collapsible site groups with connection status icons (`sync`/`sync_disabled`), active file highlighted with green dot
-- Dev info area (alpha only): SHA, parse status, diagnostic details
+- File list: collapsible site groups with connection status icons (`sync`/`sync_disabled`), active file highlighted with green dot, files clickable for navigation on connected sites
+- Settings panels: Manage Sites (collapsible), Blip Pro (collapsible)
+- Dev panel (when enabled): diagnostic log
 
 **Editing state** (top to bottom):
 
 - Header: Blip logo/wordmark + close element
 - Status indicator: "Editing" label (green accent badge with pulsing dot), inline with Save and Cancel buttons
-- Save-to-repo checkbox (shown for connected sites, checked by default) OR prompt to connect (shown for unconnected sites)
+- Save-to-repo checkbox (shown for connected sites, checked by default) OR prompt to connect (shown for unconnected sites) OR local file indicator (shown for `file:///` pages)
 - Notifications area
 - Your edits textarea
 - File list
-- Dev info area (alpha only): mutation count, tracked changes summary
+- Settings panels
+- Dev panel (when enabled)
 
 **After save** (top to bottom):
 
 - Header: Blip logo/wordmark + close element
-- Confirmation: "Saved" notification (auto-dismisses after 4 seconds)
+- Confirmation notification (auto-dismisses after 4 seconds)
 - Primary action: Edit button returns
 - Your edits textarea (now containing the diff entry from the save)
 - File list
-- Dev info area (alpha only): transaction log with new SHA
+- Settings panels
+- Dev panel (when enabled)
 
 ### Collapsed tab widget
 
 When the sidebar is collapsed, a small floating tab at top-left provides a mini control panel:
 
 - Default: shows "blip". On hover, expands to show "blip [edit] [>>]".
-- Editing: green background, stays expanded, shows "blip [save] [>>]".
+- Editing: green background, stays expanded, shows "blip [cancel] [save] [>>]".
 - Saving: green background with pulse animation, shows "blip [saving...] [>>]" with animated ellipsis.
 - Saved: green background, shows "blip [saved!] [>>]" for 1.5 seconds, then contracts.
 - Error: red background, stays expanded, shows "blip [retry] [>>]".
@@ -327,40 +408,24 @@ The tab controls delegate actions to content.js. The expand icon (>>) opens the 
 
 ## Account and configuration
 
-### Alpha version
+### Site configuration
 
-For the alpha/personal-use version:
+- GitHub repo owner, repo name, branch, and personal access token are configured per-site via the Manage Sites form in the sidebar.
+- Multiple site-to-repo mappings are supported (VIP tier: unlimited; Member tier: one site).
+- File path is resolved dynamically: Blip fetches the repo's file listing at init, filters to editable extensions, and matches the current URL path to a file. Template files and config directories are excluded via configurable patterns.
+- All configuration data is stored in `chrome.storage.local`.
 
-- GitHub repo owner, repo name, branch, and personal access token are hardcoded in a single configuration object (`config.js`).
-- File path is resolved dynamically: Blip fetches the repo's file listing at init, filters to editable extensions (`.html`, `.php`), and matches the current URL path to a file. Template files are excluded via configurable patterns.
-- Authentication uses a GitHub personal access token.
-- The hardcoded values are isolated in a single config module to make future expansion straightforward.
+### Licensing and billing
 
-### Future version
-
-The sidebar will include a configuration panel where users can:
-
-- Authenticate to GitHub via OAuth (using `chrome.identity` API for the flow)
-- Map site URLs to GitHub repos, branches, and file paths (e.g., `remaphq.com` -> `user/remaphq.com/main/index.html`)
-- Manage multiple site-to-repo mappings
-- View and manage saved credentials
-
-All configuration data is stored in `chrome.storage.sync` (syncs across the user's devices) or `chrome.storage.local`. No external web app is required for configuration. The extension is self-contained.
-
-### Billing (future)
-
-Billing can be handled without a web app using the following pattern:
-
-1. User clicks "Upgrade" in the sidebar.
-2. Blip opens a Stripe Checkout or Payment Link in a new browser tab.
-3. After payment, Stripe redirects to a success URL (can be a static page or a `chrome-extension://` URL).
-4. A lightweight serverless function (Cloudflare Worker or Vercel function, approximately 50 lines of code) handles Stripe webhooks to validate payment status.
-5. The extension checks subscription status and stores it in `chrome.storage`.
-
-This pattern is well-established among Chrome extensions. No full web application is required for billing.
+- License keys are generated via a Stripe webhook -> n8n workflow -> UUID key generation -> Gmail notification pipeline.
+- Users enter their key in the Blip Pro panel and click Activate.
+- The extension validates keys against an n8n webhook (`validate-blip-license` at `my.remaphq.com`).
+- On success, the membership tier (`foundingMember` or `foundingVIP`) and key are stored in `chrome.storage.local`.
+- The sidebar UI adapts to the tier: unlicensed shows buy/activate, Member shows key (masked) + VIP upgrade link, VIP shows an active badge.
 
 ## Use cases
 
+### Content editing
 - Fix a typo or grammatical error
 - Update a price, date, or statistic
 - Rewrite a headline because a better idea just hit you
@@ -368,75 +433,68 @@ This pattern is well-established among Chrome extensions. No full web applicatio
 - Update a privacy policy clause because another service requires it
 - Adjust copy after reading it on the live site (where it reads differently than in a code editor)
 - Fix something urgently from anywhere you have a browser
-- Any edit driven by urgency, inspiration, or real-world context that would lose momentum if routed through a code editor
+
+### Collaboration and review
 - Audit a client's site and capture all proposed text changes in one session
 - Save a before/after record of edits you want to make to your own site later
 - Review a staging site and batch your feedback as structured diffs rather than screenshots
 
+### Local file editing (Pro)
+- Edit markdown files used by AI coding assistants (Claude, Cursor, etc.) in a formatted browser view
+- Edit configuration files, task lists, or notes that live on your local machine
+- Quick edits to local development files without switching to a code editor
 
-### Freemium features (any website or web application):
+### Technical and developer use cases
+- Edit `robots.txt`, `.txt` config files, or other plain-text files served on a live site
+- Edit markdown files served via nginx or other web servers configured to serve `.md` as `text/plain` or `text/markdown`
 
-- Suggest copy edits to a website and send them the diff (by copying and pasting the diff into an email or Slack message)
-- Save your edits locally, then send them later as a block of text
+### Freemium features (any website or web application)
+- Suggest copy edits to a website and share the diff (copy, email, Slack)
+- Save edits locally, then send them later as a block of text
 - Edit any number of websites or web applications
+- Accumulate edits across multiple sites in one session
 
-### Blip Pro features:
+### Blip Pro features
+- Everything in Freemium
+- Connect to GitHub repositories
+- Edit and commit files to GitHub directly from the live site
+- Edit local files via File System Access API and save to disk
+- Clickable file navigation in the sidebar
 
-- Everything in Freemium (get a local edit history while also saving to GitHub)
-- Edit any number of sites or web apps in real time, instantly
-- Connect to your GitHub repositories
-- Edit files in your GitHub repositories
-- Save your edits to your GitHub repositories
-- Commit your edits to your GitHub repositories
-- Branch your edits to your GitHub repositories
-- Merge your edits to your GitHub repositories
+## Roadmap
 
+### Near-term (pre-launch)
+- Stripe + license key integration (end-to-end flow)
+- Grey out "add site" form if no license
+- Share/email button for freemium edit accumulator
+- Chrome Web Store submission prep (permissions justification, screenshots, listing copy)
 
-### Blip Pro roadmap milestone 1: Basic CMS features
+### Milestone 1: basic CMS features
+- Create new pages from templates
+- Edit SEO meta tags (title, description) via sidebar form
+- Edit reusable templates
 
-- create new pages, posts, or landing pages
-- edit SEO for all pages
-- edit reusable templates for pages, posts, and landing pages
-
-
-### Blip Pro roadmap milestone 2: AI-assisted editing
-
-- Use AI to suggest edits
-- Use AI to generate new pages or sections
-- Use AI to restructure navigation or layout
-- Use AI to upload or manage images
-- Use AI to create new HTML elements or modify site structure
-
+### Milestone 2: expanded platform
+- Developer mode toggle (shows dev extensions + dev panel)
+- Support for non-GitHub hosts (GitLab, Bitbucket)
+- Branch selection (edit on a staging branch, merge later)
+- Collaborative editing (multiple users editing the same site)
 
 ### Out of scope
-
-Blip is not for:
-
-- Writing new blog posts or long-form content
-- Adding new pages or sections
+- Writing new long-form content from scratch
 - Restructuring navigation or layout
 - Uploading or managing images
 - Any task that requires creating new HTML elements or modifying site structure
+- Mobile editing (Chrome extensions don't run on mobile)
 
-## Future considerations (out of scope for alpha)
+## Future considerations
 
-### Top tier:
-- Writing new pages blog posts, landing pages, or long-form content, using a templating system
-- AI-assisted page creation from templates
-- Inserting SEO meta tags, titles, and descriptions, optionally using AI
-
-### Tier two
 - Email diffs directly from Blip (branded email from a Blip domain)
 - CSS editing support
 - Visual diff preview before committing
-
-
-### Tier three (post-revenue)
-- Collaborative editing (multiple users editing the same site)
-- Mobile editing (bookmarklet or PWA approach, since Chrome extensions don't run on mobile)
-- Support for non-GitHub hosts (GitLab, Bitbucket)
 - Image replacement via drag-and-drop
-- Branch selection (edit on a staging branch, merge later)
 - Auto-commit message customization
 - Keyboard shortcuts (Ctrl+S to save, Esc to cancel)
 - Sidebar width resizing (drag handle, currently hardcoded at 300px)
+- AI-assisted page creation from templates
+- AI-assisted SEO meta tag generation
