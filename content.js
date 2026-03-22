@@ -2,7 +2,8 @@
 // Blip content script - core: sidebar, edit session, observer, save, cancel
 
 // -------------------------------------------------------
-// Shared state (referenced by github.js, mapping.js)
+// Shared state (referenced by github.js, mapping.js,
+// local-fs.js, text-diff.js)
 // -------------------------------------------------------
 let githubConfig = null;
 let sidebarFrame = null;
@@ -21,6 +22,7 @@ let lastSaveData = null;
 let hasEdits = false;
 let editableFiles = [];
 let resolvedFilePath = null;
+let useTextDiff = false;  // true when text-diff strategy is active
 
 const SAVE_GRACE_MS = 5000;
 let currentSidebarWidth = 0;
@@ -36,7 +38,7 @@ function injectSidebar() {
   sidebarFrame.src = chrome.runtime.getURL('sidebar.html');
   sidebarFrame.setAttribute('allowtransparency', 'true');
 
-  // RESTORE SAVED POSITION HERE
+  // Restore saved position
   chrome.storage.local.get(['blipTabY'], (result) => {
     if (result.blipTabY !== undefined) {
       sidebarFrame.style.top = result.blipTabY + 'px';
@@ -136,20 +138,31 @@ function handleSidebarMessage(event) {
       isDraggingSidebar = true;
       dragOffsetY = msg.offsetY;
       document.body.style.userSelect = 'none';
-      sidebarFrame.style.pointerEvents = 'none'; // <-- ADD THIS: Makes the iframe ignore the mouse
+      sidebarFrame.style.pointerEvents = 'none';
       break;
     case 'ready': sendInitialDevLogs(); break;
     case 'startEdit': startEditSession(); break;
-    case 'save': saveEdits(msg.commitToRepo !== false && !!resolvedFilePath); break;
+    case 'save':
+      // Route: local mode goes to saveLocalEdits (in local-fs.js),
+      // otherwise standard saveEdits
+      if (isLocalMode && sourceSHA === 'local-file') {
+        saveLocalEdits();
+      } else {
+        saveEdits(msg.commitToRepo !== false && !!resolvedFilePath);
+      }
+      break;
+    case 'saveLocal': saveLocalEdits(); break;
     case 'cancel': cancelEdits(); break;
     case 'closeSidebar': cancelEdits(); collapseSidebar(); break;
     case 'expandSidebar': expandSidebar(); break;
     case 'reloadPage': window.location.reload(); break;
+    case 'grantLocalAccess': handleGrantLocalAccess(); break;
+    case 'navigateTo': window.location.href = msg.url; break;
   }
 }
 
 function sendInitialDevLogs() {
-  devLog('Site', window.location.hostname, 'success');
+  devLog('Site', window.location.hostname || 'local file', 'success');
   if (githubConfig) {
     devLog('Repo', `${githubConfig.owner}/${githubConfig.repo}`, '');
     devLog('Branch', githubConfig.branch, '');
@@ -254,10 +267,13 @@ async function startEditSession() {
   try {
     devSeparator();
 
-
     const withinGracePeriod = lastSaveData && (Date.now() - lastSaveTime < SAVE_GRACE_MS);
 
-    if (!resolvedFilePath) {
+    // Source selection: local file > freemium > grace period > baseline > fetch
+    if (isLocalMode && sourceContent && sourceSHA === 'local-file') {
+      // Local file mode: source already loaded from FSAA
+      devLog('Source', `using local file (${sourceContent.length} bytes)`, 'success', 'source-status');
+    } else if (!resolvedFilePath) {
       sourceContent = document.documentElement.outerHTML;
       sourceSHA = 'local-only';
       devLog('Source', 'using local DOM (freemium mode)', 'success', 'source-status');
@@ -288,6 +304,18 @@ async function startEditSession() {
     interceptPaste();
     startObserving();
 
+    // Activate text-diff strategy for plain-text pages, or as fallback
+    if (isPlainTextPage()) {
+      useTextDiff = true;
+      snapshotText();
+      devLog('Strategy', 'text-diff (plain-text file)', 'success');
+    } else {
+      useTextDiff = false;
+      // Still take a snapshot as fallback for DOM engine misses
+      snapshotText();
+      devLog('Strategy', 'DOM-mapping (HTML page)', 'success');
+    }
+
     document.body.contentEditable = 'true';
     document.designMode = 'on';
     document.documentElement.classList.add('blip-editing');
@@ -305,7 +333,7 @@ async function startEditSession() {
 }
 
 // -------------------------------------------------------
-// Save
+// Save (online / GitHub mode)
 // -------------------------------------------------------
 async function saveEdits(commitToRepo = true) {
   if (!isEditing || !sourceContent || isSaving) return;
@@ -388,6 +416,38 @@ async function saveEdits(commitToRepo = true) {
     const totalChanges = simpleChanges.length + parentLevelChanges.length;
     devLog('Changes', `${totalChanges} edit${totalChanges !== 1 ? 's' : ''} (${simpleChanges.length} simple, ${parentLevelChanges.length} parent-level)`, 'success');
 
+    // --- Text-diff fallback: DOM engine found 0 but edits were detected ---
+    if (totalChanges === 0 && hasEdits && textDiffSnapshot) {
+      devLog('Fallback', 'DOM engine found 0 changes, trying text-diff', '', 'fallback-status');
+      const diffResult = applyTextDiff(sourceContent);
+
+      if (!diffResult.noChanges) {
+        devLog('Fallback', `text-diff found ${diffResult.changeCount} region(s)`, 'success', 'fallback-status');
+
+        const diffText = formatDiffEntry(
+          window.location.href,
+          resolvedFilePath || 'unknown',
+          diffResult.snippets
+        );
+        sendToSidebar('diffEntry', { diffText });
+
+        // For online HTML editing: capture the diff but don't commit
+        // text-diff results to GitHub (would lose HTML structure)
+        if (!commitToRepo) {
+          sourceContent = diffResult.newContent || sourceContent;
+        }
+        devLog('Fallback', 'diff captured (not committed - HTML structure preservation)', 'success');
+
+        clearTextSnapshot();
+        buildTextNodeMap(document.body, sourceContent, true);
+        exitEditMode();
+        isSaving = false;
+        sendToSidebar('saved');
+        sendToSidebar('tabState', { state: 'saved' });
+        return;
+      }
+    }
+
     if (totalChanges === 0) { isSaving = false; sendToSidebar('noChanges'); return; }
 
     for (const change of simpleChanges) {
@@ -469,6 +529,7 @@ async function saveEdits(commitToRepo = true) {
       buildTextNodeMap(document.body, sourceContent, true);
     }
 
+    clearTextSnapshot();
     exitEditMode();
     isSaving = false;
     sendToSidebar('saved');
@@ -578,9 +639,11 @@ function stripDynamicAttributes(html) {
 function exitEditMode() {
   document.designMode = 'off';
   document.body.removeAttribute('contenteditable');
+  clearTextSnapshot();
   document.documentElement.classList.remove('blip-editing');
   isEditing = false;
   hasEdits = false;
+  useTextDiff = false;
   devLog('Mode', 'designMode OFF, body non-editable', '', 'edit-mode');
   mutations = [];
   mutatedParents.clear();
@@ -594,7 +657,14 @@ function exitEditMode() {
 function init() {
   const currentHost = window.location.hostname.replace('www.', '');
   injectSidebar();
-  loadSiteConfig(currentHost);
+
+  // Check if this is a local file before trying GitHub config
+  if (isLocalFile()) {
+    isLocalMode = true;
+    initLocalEditing();
+  } else {
+    loadSiteConfig(currentHost);
+  }
 }
 
 async function resolveAndPrefetch() {
@@ -665,7 +735,7 @@ document.addEventListener('mouseup', () => {
   if (!isDraggingSidebar) return;
   isDraggingSidebar = false;
   document.body.style.userSelect = '';
-  if (sidebarFrame) sidebarFrame.style.pointerEvents = ''; // <-- ADD THIS: Restores iframe interaction
+  if (sidebarFrame) sidebarFrame.style.pointerEvents = '';
 
   // Save the final position to local storage
   const finalTop = parseInt(sidebarFrame.style.top || '0', 10);
@@ -674,13 +744,11 @@ document.addEventListener('mouseup', () => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "toggle_blip_sidebar") {
-    // Find the iframe you injected (assuming you gave it an ID like 'blip-sidebar-iframe')
     const sidebarIframe = document.getElementById('blip-sidebar-frame');
 
     if (sidebarIframe) {
-      // Toggle its visibility
       if (sidebarIframe.style.display === "none") {
-        sidebarIframe.style.display = "block"; // Or whatever your default display is
+        sidebarIframe.style.display = "block";
       } else {
         sidebarIframe.style.display = "none";
       }

@@ -76,9 +76,9 @@ React, Next.js, Vue, Svelte, and similar component-based frameworks are explicit
 - `manifest.json` - extension configuration, permissions, URL matching
 - `content.js` - injected into matched pages; manages the iframe, edit session, design mode, DOM observation, multi-file resolution
 - `content.css` - injected into matched pages; iframe positioning and page margin shift
-- `config.js` - injected into matched pages; all configuration (GitHub, file resolution, sidebar, LLM, observer settings)
+- `config.js` - injected into matched pages; all configuration (GitHub, file resolution, sidebar, observer settings)
 - `edit-history.js` - injected into matched pages; diff formatting and accumulation for the "your edits" textarea
-- `background.js` - service worker; handles GitHub API communication (fetch, commit, file listing) and LLM repair calls
+- `background.js` - service worker; handles GitHub API communication (fetch, commit, file listing)
 - `sidebar.html` - the sidebar UI (loaded inside the injected iframe); contains both collapsed tab widget and expanded sidebar views
 - `sidebar.js` - sidebar logic; view toggling, tab state, file list, dev panel, edit history display
 
@@ -167,13 +167,9 @@ This is the core technical mechanism of Blip. The guiding principle is: **never 
 
 The browser's DOM serializer does not preserve the original file's formatting. Frameworks like Alpine and HTMX mutate the DOM at runtime. Saving raw `outerHTML` would introduce formatting noise into every commit and could bake in runtime-generated attributes and state.
 
-#### Design principle: deterministic first, LLM as safety net
+#### Design principle: deterministic solution
 
-Blip's architecture prioritizes speed and predictability. Every edit should be processed deterministically using JavaScript wherever possible. An LLM call (currently Groq/Llama 3.3 70B) exists as a potential safety net for structural corruption that the deterministic path cannot repair. The LLM is never in the critical path for normal edits. This principle ensures sub-second save times for the vast majority of edits, with a ~100-200ms LLM fallback only when structural validation detects corruption.
-
-If future testing reveals scenarios where the LLM consistently produces better results, the architecture supports expanding its role. The principle is not "avoid LLMs" but rather "don't add latency when you don't need to."
-
-The LLM modules is not active at this time. It may be added in the future, or leveraged for ancillary features.
+Blip's architecture prioritizes speed and predictability. Every edit should be processed deterministically using JavaScript wherever possible. This principle ensures sub-second save times for the vast majority of edits. Blip does not use AI.
 
 #### Track 1: simple text node mapping (fast path)
 

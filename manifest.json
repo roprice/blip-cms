@@ -24,6 +24,8 @@
         "file-resolver.js",
         "mapping.js",
         "edit-history.js",
+        "text-diff.js",
+        "local-fs.js",
         "content.js"
       ],
       "css": [

@@ -117,38 +117,6 @@ async function githubCommitFile(config, newContent, sha) {
   };
 }
 
-async function llmRepairCall(llmConfig, systemPrompt, userPrompt) {
-  const response = await fetch(llmConfig.endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${llmConfig.apiKey}`
-    },
-    body: JSON.stringify({
-      model: llmConfig.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0,
-      max_tokens: 2048
-    })
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`LLM API returned ${response.status}: ${body}`);
-  }
-
-  const data = await response.json();
-  return {
-    content: data.choices[0].message.content.trim(),
-    model: data.model,
-    usage: data.usage
-  };
-}
-
-
 chrome.action.onClicked.addListener((tab) => {
   // Send a message to the content scripts running in the current tab
   if (tab.id) {

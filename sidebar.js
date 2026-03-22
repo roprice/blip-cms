@@ -25,6 +25,13 @@ const siteForm = document.getElementById('siteForm');
 const cancelAddSite = document.getElementById('cancelAddSite');
 const savedSitesList = document.getElementById('savedSitesList');
 
+// Local file elements
+const localGrantState = document.getElementById('localGrantState');
+const grantAccessBtn = document.getElementById('grantAccessBtn');
+const localFileInfo = document.getElementById('localFileInfo');
+const localFileName = document.getElementById('localFileName');
+const localGrantFile = document.getElementById('localGrantFile');
+
 // Save-to and edit history elements
 const saveToRepo = document.getElementById('saveToRepo');
 const saveToCheckbox = document.getElementById('saveToCheckbox');
@@ -36,6 +43,9 @@ const copyEditsBtn = document.getElementById('copyEditsBtn');
 
 // Track whether current site has a working repo connection
 let siteConnected = false;
+
+// Track whether we're in local file mode (file:// URL with Pro)
+let isLocalFileMode = false;
 
 // -------------------------------------------------------
 // View elements
@@ -102,9 +112,14 @@ editBtn.addEventListener('click', () => {
 
 saveBtn.addEventListener('click', () => {
     showSaving();
-    // Tell content.js whether to commit to GitHub or just capture the diff
-    const commitToRepo = siteConnected && saveToCheckbox.checked;
-    sendToContent('save', { commitToRepo });
+    if (isLocalFileMode) {
+        // Local file mode: save directly to disk
+        sendToContent('saveLocal');
+    } else {
+        // Normal mode: commit to GitHub or capture diff
+        const commitToRepo = siteConnected && saveToCheckbox.checked;
+        sendToContent('save', { commitToRepo });
+    }
 });
 
 cancelBtn.addEventListener('click', () => {
@@ -122,6 +137,14 @@ devToggle.addEventListener('click', () => {
 configToggle.addEventListener('click', () => {
     configPanel.classList.toggle('collapsed');
 });
+
+grantAccessBtn.addEventListener('click', () => {
+    grantAccessBtn.disabled = true;
+    grantAccessBtn.textContent = 'Waiting for permission...';
+    sendToContent('grantLocalAccess');
+});
+
+
 
 // -------------------------------------------------------
 // Edit history: copy button
@@ -171,6 +194,14 @@ function appendDiffEntry(diffText) {
 // Collapsible file site groups: delegated click handler
 // -------------------------------------------------------
 fileList.addEventListener('click', (e) => {
+    // Clickable file navigation
+    const fileItem = e.target.closest('.file-item[data-url]');
+    if (fileItem) {
+        const url = fileItem.dataset.url;
+        if (url) sendToContent('navigateTo', { url });
+        return;
+    }
+    // Collapse toggle
     const header = e.target.closest('.file-site-header');
     if (!header) return;
     const website = header.closest('.file-website');
@@ -322,6 +353,15 @@ function showEditing() {
         saveToRepo.classList.add('hidden');
         saveToPrompt.classList.add('hidden');
     }
+
+    // Show local file info when in local mode
+    if (isLocalFileMode) {
+        localFileInfo.classList.remove('hidden');
+        saveToRepo.classList.add('hidden');
+        saveToPrompt.classList.add('hidden');
+    } else {
+        localFileInfo.classList.add('hidden');
+    }
 }
 
 function showSaving() {
@@ -451,7 +491,11 @@ function renderAllSites() {
 
         for (const fileName of sorted) {
             const isActive = fileName === siteData.resolvedFile;
-            html += `<div class="file-item ${isActive ? 'active' : ''}">
+            const fileUrl = isConnected
+                ? `https://${escapeHtml(siteUrl)}/${escapeHtml(fileName)}`
+                : null;
+            const clickAttr = fileUrl ? `data-url="${fileUrl}"` : '';
+            html += `<div class="file-item ${isActive ? 'active' : ''}" ${clickAttr}>
                 <span class="file-dot"></span>
                 <span class="file-name">${escapeHtml(fileName)}</span>
             </div>`;
@@ -516,7 +560,13 @@ window.addEventListener('message', (event) => {
             break;
         case 'saved':
             showDefault();
-            showNotification('Saved');
+            if (isLocalFileMode && siteConnected) {
+                showNotification('Saved to file');
+            } else if (siteConnected) {
+                showNotification('Saved');
+            } else {
+                showNotification('Saved to Blip');
+            }
             break;
         case 'cancelled':
             showDefault();
@@ -565,10 +615,53 @@ window.addEventListener('message', (event) => {
         case 'devSeparator':
             devLogSeparator();
             break;
+        case 'localFileStatus':
+            handleLocalFileStatus(msg);
+            break;
     }
 });
 
+// -------------------------------------------------------
+// Local file mode handling
+// -------------------------------------------------------
+// -------------------------------------------------------
+// Local file mode handling
+// -------------------------------------------------------
+function handleLocalFileStatus(msg) {
+    switch (msg.status) {
+        case 'ready':
+            isLocalFileMode = true;
+            defaultState.classList.remove('hidden');
+            localGrantState.classList.add('hidden');
+            editBtn.disabled = false;
+            editBtn.textContent = 'Edit';
+            localFileName.textContent = msg.fileName;
+            grantAccessBtn.disabled = false;
+            grantAccessBtn.textContent = 'Grant folder access';
+            break;
 
+        case 'needs-grant':
+            isLocalFileMode = true;
+            defaultState.classList.add('hidden');
+            editBtn.disabled = true;
+            localGrantState.classList.remove('hidden');
+            localGrantFile.textContent = msg.fileName;
+            break;
+
+        case 'not-pro':
+            isLocalFileMode = false;
+            editBtn.disabled = false;
+            break;
+
+        case 'error':
+            isLocalFileMode = false;
+            showNotification(msg.error || 'Local file error', 'error');
+            localGrantState.classList.add('hidden');
+            grantAccessBtn.disabled = false;
+            grantAccessBtn.textContent = 'Grant folder access';
+            break;
+    }
+}
 
 // -------------------------------------------------------
 // License panel: set UI state based on stored membership
@@ -681,3 +774,9 @@ document.getElementById('licenseToggle').addEventListener('click', () => {
 sendToContent('ready');
 
 
+// Show dev panel from storage toggle
+chrome.storage.local.get(['blipDev'], (result) => {
+    if (result.blipDev) {
+        devPanel.style.display = 'flex';
+    }
+});

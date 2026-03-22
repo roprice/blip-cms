@@ -3,9 +3,12 @@
 
 const BLIP_CONFIG = {
   // File resolution
+  // File resolution
   files: {
-    editableExtensions: ['.html', '.php'],
-    excludePatterns: ['template']
+    editableExtensions: ['.html', '.htm', '.shtml', '.md', '.txt'],
+    localEditableExtensions: ['.html', '.htm', '.shtml', '.md', '.txt'],
+    devExtensions: ['.php', '.asp', '.aspx', '.rss', '.txt', '.css', '.js', '.json', '.xml', '.svg', '.py', '.ts', '.tsx', '.jsx'],
+    excludePatterns: ['template', '.git', '.vscode', '.github', '.blip', '.claude', '.gemini', '.agent', '.antigravity', '.codex', '.copilot', '.cursor', '.ref', 'node_modules', 'dist']
   },
 
   // Sidebar settings
@@ -23,7 +26,7 @@ const BLIP_CONFIG = {
 
   // Dev mode
   dev: {
-    enabled: false,
+    enabled: true,
     showNotifications: true
   },
 

@@ -55,6 +55,11 @@
             <span class="status-dot"></span>
             Editing
           </div>
+          <!-- Local file indicator (shown on file:// pages with Pro) -->
+          <div id="localFileInfo" class="local-file-info hidden">
+            <span class="material-symbols-outlined local-file-icon">folder_open</span>
+            <span>Saving to <strong id="localFileName"></strong></span>
+          </div>
           <button class="btn btn-save" id="saveBtn">Save</button>
           <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
         </div>
@@ -73,11 +78,27 @@
         </div>
       </div>
 
+      <!-- Local file indicator (shown on file:// pages with Pro) -->
+      <div id="localFileInfo" class="local-file-info hidden">
+        <span class="material-symbols-outlined local-file-icon">folder_open</span>
+        <span>Saving to <strong id="localFileName"></strong></span>
+      </div>
+
       <!-- Saving state -->
       <div id="savingState" class="hidden">
         <div class="status-badge saving">
           <span class="status-dot"></span>
           Saving...
+        </div>
+      </div>
+
+      <!-- Local file: grant access prompt (Pro users on file:// pages) -->
+      <div id="localGrantState" class="hidden">
+        <div class="local-grant-prompt">
+          <p class="local-grant-title">Local file detected</p>
+          <p class="local-grant-file" id="localGrantFile"></p>
+          <p class="local-grant-hint">Grant folder access to edit and save this file directly.</p>
+          <button class="btn btn-primary" id="grantAccessBtn">Grant folder access</button>
         </div>
       </div>
 
@@ -157,6 +178,7 @@
             <polyline points="2,5 7,9 12,5" />
           </svg>
         </button>
+        <span id="licenseActiveBadge" class="license-active-badge hidden"></span>
       </div>
 
       <!-- Unlicensed state -->
