@@ -3,15 +3,34 @@
 > "People think that writing is writing, but actually writing is editing. Otherwise, you're just taking notes."
 > - Chris Abani
 
+
+## Table of Contents
+
+### Purpose 
+### Philosophy
+### Use cases
+### Compatibility
+### Role of Github
+### Architecture
+### User onboarding experience
+### Core editing mechanism
+### UI states
+### UI design
+### Account and configuration
+### Current state
+### Features
+### Roadmap
+
+
 ## Purpose
 
 Blip is a Chrome extension for editing website content in place, directly on the live page.
 
 For **pro users** with GitHub-connected sites, Blip lets you edit your live website and commit changes without ever leaving the page. Pro users can also edit local files (via the File System Access API) and save changes directly to disk.
 
-For **everyone else**, Blip lets you activate designMode on any webpage, make edits, and save a structured before/after diff to the sidebar. These diffs can be copied, shared, or emailed. No GitHub account required.
+For **everyone else**, Blip lets you activate designMode on any webpage, make edits, and save a structured before/after diff to the sidebar. These diffs can be copied, shared, or emailed. No GitHub account required. No more screenshots with a red-circle workflows.
 
-Blip exists because the current workflow for making small edits to a static website is absurdly friction-heavy: open VS Code, find the file, find the line, make the edit, save, commit, push, wait for deploy, check the live site. This kills flow state and discourages the kind of rapid, iterative refinement that makes websites great.
+Blip exists because the current workflow for making small edits to a static website is absurdly friction-heavy: open VS Code, find the file, find the line, make the edit, save, commit, push, wait for deploy, check the live site. Distrubuting this work among multiple people compounds the friction of this process. This kills flow state and discourages the kind of rapid, iterative refinement that makes websites great.
 
 With Blip, you visit your site, click edit, make your change, click save. Done. Or, if it's not your site, you capture the diff and share it with whoever owns it.
 
@@ -19,7 +38,7 @@ With Blip, you visit your site, click edit, make your change, click save. Done. 
 
 ### Flow state above all else
 
-Blip is designed around one core principle: never break the user's flow. The entire interaction happens on the live site. There is no context switch to a code editor, no terminal, no separate admin panel. The user stays in the browser, on their site, thinking about their content.
+Blip is designed around one core principle: never break the user's flow. The entire interaction happens on the live site. There is no context switch to a code editor, no terminal, no login/2fa, no separate admin panel. The user stays in the browser, on their site, thinking about their content.
 
 ### The vibe-coding counterpart
 
@@ -27,47 +46,163 @@ When Andrej Karpathy coined "vibe coding" in early 2025, the premise was working
 
 ### Locality of behavior
 
-Blip targets HTML-first frameworks because they embody the principle of Locality of Behavior (LoB): the behavior of a unit of code is obvious just by looking at that unit of code. In these architectures, the content lives in the DOM, in the HTML file itself, not abstracted away into components, state trees, or databases. This is what makes direct DOM editing viable. It's also what makes these frameworks ideal for AI-assisted development: the LLM can reason about a single file rather than tracing dependencies across dozens of modules.
+Blip targets HTML-first approaches to website/webapp development because they embody the principle of Locality of Behavior (LoB): the behavior of a unit of code is obvious just by looking at that unit of code. In these architectures, the content lives in the DOM, in the HTML file itself, not abstracted away into components, state trees, or databases. The DOM is the content database. This is what makes direct DOM editing viable. It's also what makes these frameworks ideal for AI-assisted development: the LLM can more efficiently reason about a single file rather than tracing dependencies across dozens of modules.
 
-### Not a CMS
+### Not a traditional CMS
 
-Blip is not a content management system. It does not manage posts, pages, media libraries, or taxonomies. It is a micro-editing tool. It is optimized for one thing: making quick changes to existing content on a live site. Adding a new blog post, restructuring your navigation, or uploading images are out of scope. Those are authoring tasks. Blip is for editing.
+Blip is a new kind of CMS for the vibe coding era. It does not  manage media libraries, content moderation/permissions workflows, taxonomies, or content data structures. It is a micro-CMS focused first and foremost on the most important function of an online business: editing text content. This is based on the premise that editing creates more value than authoring. Thus Blip is optimized for one thing: making quick changes to existing content on a live site with nearly zero friction. 
 
-## Why GitHub
+Blip will  evolve into fulfilling the second most important role of a CMS: quickly authoring and managing new pages, posts, and landing pages. It will also allow limited but essential meta editing, such as SEO meta tags and robots.tx. But it will never be an end-to-end website and content management solution as some CMS's aspire to - and frictionless, fast edit-in-place of live websites will always be the core function.
 
-GitHub is central to Blip's architecture. The reasons are:
 
-1. **Source of truth.** The original file on GitHub is the canonical version of the site. Blip fetches it before every edit session. This avoids saving framework-mutated DOM state (Alpine, HTMX, and others modify the DOM at runtime) and preserves the original file's formatting, indentation, and structure.
+## Use cases
 
-2. **Version control for free.** Every edit becomes a git commit with a timestamp. The user gets full history, rollback capability, and diffs without Blip having to build any of that.
+### Copyediting  and content editing
+- Rewrite a headline because a better idea just hit you
+- Adjust copy after reading it on the live site (where it reads differently than in a code editor)
+- Rewrite CTAs in keeping with a news offering or product launch
+- Rewrite blog posts, case studies, or services description in live site, where it reads differently than in a code editor or CMS
+- Edit or rewrite profiles on 3rd party platforms, such as LinkedIn, Reddit, PRWeb, etc;  share with an assistant for implementation
 
-3. **Deployment pipeline.** Most static sites already deploy from GitHub via Netlify, Vercel, Cloudflare Pages, or GitHub Pages. By committing to GitHub, Blip triggers the existing deploy pipeline automatically. No additional infrastructure needed.
+### A/B copy testing prep 
+- Draft variant conversion copy (eg. headlines/CTAs) directly on the live page to capture options before handing off to a developer or testing tool
+- Make timestamped edits to conversion copy saved directly to repo; evaluate later against analytics.
+- Swap variant back in, commit, compare periods in analytics
 
-4. **Authentication and permissions.** GitHub personal access tokens provide identity, access control, and repo permissions. Blip does not need its own auth system or user database.
+### Emergency hotfix 
+- Fix a typo or grammatical error
+- Update a price, date, or statistic
+- Remove a client's name from a case study that shouldn't be public
+- Update a privacy policy clause because another service requires it
 
-5. **No custom backend required.** Blip operates as a pure client-side Chrome extension that talks directly to GitHub's API. There is no Blip server, no database, no infrastructure to maintain for the core editing flow.
+### Onboarding and handoff 
+- Agency handing a site to a client, walking them through edits live as training ("here's how you'd change this")
+- Similar to above but showing multiple content and copy options beyond the saved version
 
-6. **SHA-based consistency.** GitHub's Contents API uses SHA hashes to ensure atomic commits. Blip always knows exactly which version of the file it's working against, preventing silent overwrites or merge conflicts.
+### Collaboration and review 
+- Audit a client's site and capture all proposed text changes in one session
+- Save a before/after record of edits you want to make to your own site later
+- Review a staging site and batch your feedback as structured diffs rather than screenshots
 
-## Target platforms
+### Localization/translation review 
+- editing live pages in a second language to verify translated copy reads naturally in context
+- editing non-translated page elements in freemium mode for sharing with developer
 
-Blip is designed for static, flat-file websites built with HTML-first frameworks and approaches:
+### Microcopy editing for product managers
+- adjust labels, button text, and informational text in enterprise websites, platforms, and apps
+- for technical site editors, adjust dynamic text such as tooltips, warning/error messages, and help text
+
+### SEO editing
+- Optimize content topics, depth, interlinkage, and structure
+- Edit robots.txt file to control search engine indexability
+- Edit llms.txt file or similar to manage indexing by LLM robots
+- [upcoming] Edit SEO fields directly via direct DOM editing: manage page title, meta description, opengraph
+
+### Technical and developer use cases 
+- Edit .md., .json, .txt, and .xml files that inform live feeds or on-site tool behavior, such as search or calculators
+- Edit markdown files that inform "front-end" AI agents
+
+### AI-assisted site management (low-friction computer use)
+
+- Use Blip's structured diffs as instructions for an AI coding assistant to implement copy changes
+- Train a computer-use agent to operate Blip directly - proposing edits in Freemium mode or committing them in Pro
+- Edit instruction files for DOM-embedded AI agents (chatbots, assistants, calculators) without a redeploy.
+- Allow embedded front-end agents to self-improve by editing their own instructions
+
+
+## Compatibility
+
+### Compatible website types for Blip Freemium
+
+#### Business websites and blogs
+
+Blip Freemium allows stakeholders, clients, or content managers to mock up text changes directly on live company pages regardless of whether they are hosted on closed platforms like Wix, Squarespace, and Shopify, or traditional CMSs like WordPress. Users can instantly capture a structured diff of their live edits to send to the web team for implementation, removing the ambiguity of screenshots and external documents.
+
+#### Social-media platforms
+
+Freemium enables social media managers and marketers to preview how posts, profile bios, or ad copy will appear natively within the UI of major networks like LinkedIn, Facebook, X (Twitter), and YouTube. By editing the live DOM, teams can test character limits and visual flow before officially publishing, capturing the exact text changes for internal approval workflows.
+
+#### Forums, marketplaces and other platforms on the web
+
+For e-commerce managers and community moderators, Blip facilitates in-situ drafting of product descriptions, storefront copy, or pinned posts on major hubs like Amazon, eBay, Etsy, Quora, and Reddit. Users can refine their copy exactly as the customer will see it, utilizing the diff capture to securely update the actual listings or guidelines later.
+
+#### Web applications
+
+Blip serves as a frictionless tool for product managers, UX writers project, managers,, and SaaS founders to edit microcopy, dashboard labels, and onboarding text directly within live web interfaces (such as Salesforce, HubSpot, Notion, Monday.com, or bespoke internal tools or SaaS products). The generated diffs provide engineers with precise, context-aware instructions for updating the application's underlying codebase or localization files.
+
+
+
+### Compatible website type for Blip Pro
+
+These share a common trait: content lives directly in Github-managed files, particularly inside an HTML file DOM that is rendered as a flat file. For such properties, edit-in-place without a complex reconciliation layer is viable and simple. Some use cases call for a post-hoc reconciliation process.
+
+#### Vibe coded flat-file websites
+
+Websites built with AI coding assistants (Claude, ChatGPT) or agentic IDE platforms (Bolt.new, Replit, Cursor) frequently output pure, flat-file architectures (HTML, CSS, JS). Users often deploy these directly to GitHub Pages or simple hosting environments. While AI is unparalleled for generating the initial codebase at the speed of thought, making minor post-deployment tweaks (fixing typos, changing prices) via chat prompts introduces massive friction. Blip serves as the deterministic, surgical counterpart to vibe coding—allowing the creator to instantly edit the live, AI-generated HTML and commit it straight back to the repo without breaking flow state. Post-hoc reconciliation not required.
+
+#### WordPress, Drupal, and Django web properties
+
+Web properties built with WordPress, Drupal, or Django - from blogs to enterprise websites to SaaS applications - can be configured to export flat HTML files using tools like Simply Static, Tome, or django-distill. When those files are committed to and managed in a GitHub repository, they become compatible with Blip Pro. Post-hoc reconciliation required.
+
+#### API-based Headless CMS websites
+
+When a headless CMS outputs static files committed to a git repo, those files are fully compatible with Blip. This includes websites rendered from products such as Strapi, Contentful, Sanity + Astro/Next, and Builder.io. Blip edits the rendered HTML, but the source of truth lives in a remote database. Post-hoc reconciliation required.
+
+#### Git-based Headless CMS websites
+
+ For headless CMSs like Decap CMS (formerly Netlify CMS) or TinaCMS, Blip can edit rendered HTML or directly edit the source .md/.json files via the file navigator. If editing source files directly, no reconciliation needed. If editing rendered HTML without realizing the source is in an adjacent file, reconciliation required.
+ 
+#### No-build, flat-file websites
+
+Some developers and agencies build "no-build" flat file website using basic building blocks of the web:
 
 - Vanilla HTML, CSS, and JS
-- Custom elements
+- Custom web components
 - Native HTML data attributes
-- Mavo
-- Hyperscript
-- Alpine.js
-- Petite-Vue
-- Surreal
-- Lucia
 
-These share a common trait: content lives directly in HTML files in the DOM, not in databases, JSON files, or abstracted component state. This is what makes edit-in-place viable without a complex reconciliation layer.
+An emerging array of "no-build" front-end JS frameworks provide interactivity and backend integration while also allowing for a HTML-first, DOM-as-content-database approach. These include:
 
-React, Next.js, Vue, Svelte, and similar component-based frameworks are explicitly out of scope. In those architectures, the rendered DOM is a projection of component state, not the source. Mapping DOM edits back to source files is a fundamentally harder problem.
+- Alpine.js https://github.com/alpinejs/alpine
+- Mavo (https://github.com/mavoweb/mavo)
+- Hyperscript (https://github.com/bigskysoftware/_hyperscript)
+- Petite-Vue (https://github.com/vuejs/petite-vue)
 
-## Architecture
+Blip complements such solutions natively, allowing for immediate edits and not requiring post-hoc reconcliation.
+
+
+### Non-compatible website types for Blip Pro
+
+While Blip Freemium is an excellent complement to any of the solutions mentioned below, they are not suitable for Blip Pro.
+
+#### Build-oriented JS frameworks
+
+Like traditional CMS software products, JS frameworks requiring a build step, such as React, Next.js, Vue, Svelte, and similar component-based frameworks are explicitly out of scope for Blip. In those architectures, the rendered DOM is a projection of component state, not the source. Mapping DOM edits back to source files is a fundamentally harder problem that Blip is not focused on solving. 
+
+#### Proprietary CMS platforms 
+
+Blip cannot map edits back to relational databases, as would be necessary for traditional CMS solutions that leave content in database rather than rendering it as static files managed in Git repos. These are largely off-target for Blip, especially  the major popular proprietary CMS tools: Shopify, Wix, Squarespace, Framer, Webflow, etc. 
+ 
+
+## Why Github
+
+ GitHub is central to Blip's architecture. The reasons are:
+
+ 1. **Source of truth.** The original file on GitHub is the canonical version of the site. Blip fetches it before every edit session. This avoids saving framework-mutated DOM state (Alpine, HTMX, and others modify the DOM at runtime) and preserves the original file's formatting, indentation, and structure.
+
+ 2. **Version control for free.** Every edit becomes a git commit with a timestamp. The user gets full history, rollback capability, and diffs without Blip having to build any of that.
+
+ 3. **Deployment pipeline.** Most static sites already deploy from GitHub via Netlify, Vercel, Cloudflare Pages, or GitHub Pages. By committing to GitHub, Blip triggers the existing deploy pipeline automatically. No additional infrastructure needed.
+
+ 4. **Authentication and permissions.** GitHub personal access tokens provide identity, access control, and repo permissions. Blip does not need its own auth system or user database.
+
+ 5. **No custom backend required.** Blip operates as a pure client-side Chrome extension that talks directly to GitHub's API. There is no Blip server, no database, no infrastructure to maintain for the core editing flow.
+
+ 6. **SHA-based consistency.** GitHub's Contents API uses SHA hashes to ensure atomic commits. Blip always knows exactly which version of the file it's working against, preventing silent overwrites or merge conflicts.
+
+
+## Blip Architecture
+
+Nothing described in the Roadmap has been built, apart from a portion of the membership functionality.
 
 ### Chrome extension structure
 
@@ -90,8 +225,8 @@ React, Next.js, Vue, Svelte, and similar component-based frameworks are explicit
 
 ```
 files: {
-  editableExtensions: ['.html', '.htm', '.md'],
-  localEditableExtensions: ['.html', '.htm', '.md', '.txt'],
+  editableExtensions: ['.html', '.htm', '.shtml'],
+  localEditableExtensions: ['.html', '.htm', '.shtml', '.md', '.txt'],
   devExtensions: ['.php', '.asp', '.aspx', '.txt', '.css', '.js', '.json', '.xml', '.svg', '.py', '.ts', '.tsx', '.jsx'],
   excludePatterns: ['template', '.git', '.vscode', '.github', '.blip', '.claude', '.gemini', '.agent', '.antigravity', '.codex', '.copilot', '.cursor', '.ref', 'node_modules', 'dist']
 }
@@ -108,7 +243,7 @@ The sidebar is a single custom-injected iframe on the left side of the browser w
 
 **Single-iframe architecture:**
 
-The iframe is always present in the DOM. When collapsed, it shrinks to the tab widget dimensions (~150px wide, 38px tall) and is transparent, floating over the page content. When expanded, it grows to 300px wide by 100vh and the page body receives a left margin to make room.
+The iframe is always present in the DOM. When collapsed, it shrinks to the tab widget dimensions (~150px wide, 38px tall) and is transparent, floating over the page content. When expanded, it grows to 350px wide by 100vh and the page body receives a left margin to make room.
 
 This architecture solves a critical problem: `document.designMode = 'on'` on the host page makes all host-page DOM elements part of the editing surface. Controls injected directly into the host page (buttons, tabs) become unclickable during editing. Because the iframe has its own `document` object, `designMode` on the host page does not reach into the iframe, making all controls inside it always clickable.
 
@@ -352,7 +487,7 @@ The `dev.enabled` flag in `config.js` controls whether dev log messages are sent
 
 ### Sidebar layout
 
-The sidebar is fixed at 300px wide. It is injected as an iframe on the left side of the viewport. When expanded, the page content shifts to the right to accommodate it. When collapsed, only the floating tab widget is visible.
+The sidebar is fixed at 350px wide. It is injected as an iframe on the left side of the viewport. When expanded, the page content shifts to the right to accommodate it. When collapsed, only the floating tab widget is visible.
 
 **Default state** (top to bottom):
 
@@ -423,78 +558,97 @@ The tab controls delegate actions to content.js. The expand icon (>>) opens the 
 - On success, the membership tier (`foundingMember` or `foundingVIP`) and key are stored in `chrome.storage.local`.
 - The sidebar UI adapts to the tier: unlicensed shows buy/activate, Member shows key (masked) + VIP upgrade link, VIP shows an active badge.
 
-## Use cases
 
-### Content editing
-- Fix a typo or grammatical error
-- Update a price, date, or statistic
-- Rewrite a headline because a better idea just hit you
-- Remove a client's name from a case study that shouldn't be public
-- Update a privacy policy clause because another service requires it
-- Adjust copy after reading it on the live site (where it reads differently than in a code editor)
-- Fix something urgently from anywhere you have a browser
 
-### Collaboration and review
-- Audit a client's site and capture all proposed text changes in one session
-- Save a before/after record of edits you want to make to your own site later
-- Review a staging site and batch your feedback as structured diffs rather than screenshots
+## Current status 2026-03-22
 
-### Local file editing (Pro)
-- Edit markdown files used by AI coding assistants (Claude, Cursor, etc.) in a formatted browser view
-- Edit configuration files, task lists, or notes that live on your local machine
-- Quick edits to local development files without switching to a code editor
+Note that this document currently serves as a combined product strategy and specs document.
 
-### Technical and developer use cases
-- Edit `robots.txt`, `.txt` config files, or other plain-text files served on a live site
-- Edit markdown files served via nginx or other web servers configured to serve `.md` as `text/plain` or `text/markdown`
+Everything described in these sections has been built:
 
-### Freemium features (any website or web application)
-- Suggest copy edits to a website and share the diff (copy, email, Slack)
-- Save edits locally, then send them later as a block of text
+- Architecture
+- User onboarding experience
+- Core editing mechanism
+- UI states
+- UI design
+- Features
+
+Nothing in the Roadmap has been built, except backend (n8n, Stripe) portions of the licensing flow (## Account and configuration)
+
+All use cases (## Use cases) are currently viable except:
+`- [upcoming] Edit SEO fields directly via direct DOM editing: manage page title, meta description, opengraph`
+
+## Features
+
+### Freemium features 
+- Create copy and content edits to any website or web application 
+- Save edits locally, then send them later as a block of text using the redline log's  (copy and paste)
 - Edit any number of websites or web applications
 - Accumulate edits across multiple sites in one session
 
 ### Blip Pro features
-- Everything in Freemium
 - Connect to GitHub repositories
+- Instantly see which files in a given repo are suitable for editing by Blip
 - Edit and commit files to GitHub directly from the live site
 - Edit local files via File System Access API and save to disk
-- Clickable file navigation in the sidebar
+- Edit .md, .txt, .xml, and .json files
+- Clickable file navigation in the sidebar (useful for toggling between files with and without a page navigation)
+- Dev panels logs let non-technical Pro users report saving issues to devs, to help them optimize for Blip editing
+- Edit markdown files used by AI coding assistants (Claude, Cursor, etc.) in a formatted browser view
+- Edit configuration files, task lists, or notes that live on your local machine
+- Quick edits to local development files without switching to a code editor
 
 ## Roadmap
 
 ### Near-term (pre-launch)
 - Stripe + license key integration (end-to-end flow)
 - Grey out "add site" form if no license
-- Share/email button for freemium edit accumulator
-- Chrome Web Store submission prep (permissions justification, screenshots, listing copy)
+- Design enhancements, in sync with existing www.blipcms.com website design refresh
+- Extract product-strategy.md and let specs.md be more narrowly confined to specs (do just before submitting to CWS)
+- Manual QA
 
-### Milestone 1: basic CMS features
-- Create new pages from templates
+### Launch
+- Chrome Web Store submission prep
+- Write permissions justification
+- Screenshots (tone strategy: screenshots should show the product in action, with a focus on the user experience. They should be clean, modern, and professional. They should also be consistent with the product's branding.)
+- Write listing copy
+- Prepare terms and conditions, privacy policy pages
+- Secure @blipcms.com email address
+- Submit to CWS
+- Monitor CWS review process
+- Address any issues raised by CWS review
+- Publish to CWS
+
+### Milestone 1: Post-launch shareability enhancements
+- A unique redline log for each site you edit - with its own copy, share, clear and delete controls
+- Email button for freemium redline log 
+- Email diffs directly from Blip (branded email from a Blip domain)
+- Minimalist diffs shared to redline log (minimum viable markup as opposed to Github-standards defaults for diffs)
+
+### Milestone 2: features for marketers and content managers
+- Edit file names
 - Edit SEO meta tags (title, description) via sidebar form
-- Edit reusable templates
+- Before and after screenshots, downloadable
+- Sidebar width resizing (drag handle, currently hardcoded at 350px)
 
-### Milestone 2: expanded platform
+### Milestone 3: features for developers and technical marketers
 - Developer mode toggle (shows dev extensions + dev panel)
 - Support for non-GitHub hosts (GitLab, Bitbucket)
-- Branch selection (edit on a staging branch, merge later)
-- Collaborative editing (multiple users editing the same site)
+- Branch selection per site (main, dev, etc)
+- Keyboard shortcuts: toggle sidebar, toggle edit/cancel mode, save, and toggle between repo branches
+- Source file detection: flag when edited HTML content originates in an adjacent .md, .json, or other source file, with a prompt to edit there instead
 
-### Out of scope
-- Writing new long-form content from scratch
-- Restructuring navigation or layout
-- Uploading or managing images
-- Any task that requires creating new HTML elements or modifying site structure
-- Mobile editing (Chrome extensions don't run on mobile)
 
 ## Future considerations
-
-- Email diffs directly from Blip (branded email from a Blip domain)
+- Collaborative editing (multiple users editing the same site)
 - CSS editing support
-- Visual diff preview before committing
+- Create new pages from templates 
+- Edit reusable templates
+- Delete files (pages and posts)
 - Image replacement via drag-and-drop
 - Auto-commit message customization
-- Keyboard shortcuts (Ctrl+S to save, Esc to cancel)
-- Sidebar width resizing (drag handle, currently hardcoded at 300px)
+- Integrations with project/task management tools (share button > Monday.com, Jira, etc)
+- Detect source-file built pages, ie for headless CMS products like Tiny CMS
 - AI-assisted page creation from templates
 - AI-assisted SEO meta tag generation
+- WordPress plugin that that translates Blip commits to database
