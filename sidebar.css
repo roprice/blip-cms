@@ -727,7 +727,7 @@ span.label-save {
 }
 
 .diff-before {
-    color: var(--error);
+    color: var(--text-muted);
     display: block;
     padding: 2px 4px;
     background: rgba(185, 28, 28, 0.04);
