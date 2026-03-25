@@ -203,12 +203,21 @@ async function saveLocalFileToDisk(content) {
 // -------------------------------------------------------
 
 async function initLocalEditing() {
-  // Check Pro license
-  const licenseResult = await new Promise((resolve) => {
-    chrome.storage.local.get(['blipMembership'], resolve);
-  });
-  const membership = licenseResult.blipMembership || {};
-  const isPro = membership.foundingMember || membership.foundingVIP;
+  // Check Pro license directly from storage (not via licensing.js)
+  // because file:// pages may have a different storage context.
+  // Retry once after a short delay if the first read comes back empty,
+  // since chrome.storage can race on file:// page load.
+  let isPro = false;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const licenseResult = await new Promise((resolve) => {
+      chrome.storage.local.get(['blipMembership'], resolve);
+    });
+    const membership = licenseResult.blipMembership || {};
+    isPro = membership.foundingMember || membership.foundingVIP;
+    if (isPro) break;
+    if (attempt === 0) await new Promise(r => setTimeout(r, 500));
+  }
 
   if (!isPro) {
     sendToSidebar('localFileStatus', {

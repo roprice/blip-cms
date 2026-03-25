@@ -11,7 +11,8 @@
     "default_title": "Toggle Blip"
   },
   "host_permissions": [
-    "https://api.github.com/*"
+    "https://api.github.com/*",
+    "https://my.remaphq.com/*"
   ],
   "content_scripts": [
     {
@@ -20,6 +21,7 @@
       ],
       "js": [
         "config.js",
+        "licensing.js",
         "github.js",
         "file-resolver.js",
         "mapping.js",
@@ -42,7 +44,8 @@
       "resources": [
         "sidebar.html",
         "sidebar.js",
-        "sidebar.css"
+        "sidebar.css",
+        "config.js"
       ],
       "matches": [
         "<all_urls>"

@@ -34,7 +34,7 @@ iframe#blip-sidebar-frame.blip-iframe-collapsed body {
 
 /* Page shift when sidebar is expanded*/
 html.blip-sidebar-open body {
-  margin-left: 350px !important;
+  margin-left: 352px !important;
   transition: margin-left 0.2s ease;
-  width: calc(100% - 350px);
+  width: calc(100% - 352px);
 }

@@ -24,6 +24,15 @@ const BLIP_CONFIG = {
     foundingVIP: false
   },
 
+  // Capability map: which features each tier unlocks
+  capabilities: {
+    foundingMember: ['github-commit', 'local-file-edit', 'add-site'],
+    foundingVIP: ['github-commit', 'local-file-edit', 'add-site', 'unlimited-sites']
+  },
+
+  // License cache TTL (7 days in ms)
+  licenseTTL: 7 * 24 * 60 * 60 * 1000,
+
   // Dev mode
   dev: {
     enabled: true,

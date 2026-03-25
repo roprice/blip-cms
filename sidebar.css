@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;200&display=swap');
 
 
 
@@ -43,6 +43,10 @@
 
 
 
+}
+
+span.license-active-badge.tier-free {
+    display: none;
 }
 
 /* Target inputs, or add specific classes if you prefer */
@@ -604,95 +608,218 @@ span.label-save {
 }
 
 /* ===================== SITE EDITS (YOUR EDITS) ===================== */
-.site-edits {
-    position: relative;
-    padding-bottom: 20px;
-}
 
-.site-edits-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 0 4px;
-}
 
-.site-edits-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-    letter-spacing: 0.02em;
-}
 
-.site-edits-copy {
-    font-size: 17px !important;
-    color: var(--text-muted);
-    cursor: pointer;
-    opacity: 0.6;
-    transition: opacity 0.15s, color 0.15s;
-    user-select: none;
-    position: absolute;
-    right: 0;
-    top: 2px;
-    padding: 0 4px !important;
-}
 
-.site-edits-copy:hover {
-    opacity: 1;
-    color: var(--accent);
-}
 
-.site-edits-copy.copied {
-    color: var(--accent);
-    opacity: 1;
-}
-
-.site-edits textarea {
+.edits-container {
     width: 100%;
     padding: 8px 10px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     line-height: 1.6;
     color: var(--text);
-    background: #d7ded6;
+    background: white;
     border: 1px solid #d7ded6;
     border-radius: 6px;
-    resize: vertical;
-    outline: none;
-    transition: border-color 0.15s;
+    max-height: 500px;
+    overflow-y: auto;
 }
 
-.site-edits button {
-    font-size: 12px;
+/* ===================== EDITS: PER-SITE CONTAINERS ===================== */
+.edits-wrapper {
+    position: relative;
+    margin: 20px 0 10px 0;
+}
+
+.edits-placeholder {
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    padding: 12px 10px;
+    background: white;
+    border: 1px solid #d7ded6;
+    border-radius: 6px;
+    margin: 0;
+}
+
+/* Per-site section */
+.edits-site-section {
+    margin-bottom: 12px;
+}
+
+.edits-site-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 0 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.edits-site-name {
+    flex: 1;
+}
+
+.edits-site-action {
+    font-size: 15px !important;
     color: var(--text-muted);
     cursor: pointer;
-    opacity: 0.6;
+    opacity: 0.5;
     transition: opacity 0.15s, color 0.15s;
     user-select: none;
-    position: absolute;
-    right: 0;
-    bottom: 2px;
 }
 
-.site-edits button:hover {
+.edits-site-action:hover {
     opacity: 1;
     color: var(--accent);
 }
 
-.site-edits textarea:focus {
-    border-color: var(--accent);
+.edits-site-action.clear-action:hover {
+    color: var(--error);
 }
 
-.site-edits textarea::placeholder {
-    color: var(--text-muted);
+.edits-site-action.copied {
+    color: var(--accent);
+    opacity: 1;
+}
+
+.edits-site-container {
+    width: 100%;
+    padding: 8px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--settings-bg);
+    border: 1px solid #d7ded6;
+    border-radius: 6px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Diff entries */
+.diff-entry {
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.diff-entry:last-child {
+    border-bottom: none;
+}
+
+.diff-header {
     font-family: 'DM Sans', sans-serif;
-    font-size: 11px;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: none;
+    /* URL is redundant since we have per-site headers now */
 }
 
-/* Empty state: smaller textarea */
-.site-edits textarea:placeholder-shown {
+.diff-timestamp {
+    font-size: 9px;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-top: 4px;
+}
+
+.diff-before {
+    color: var(--error);
+    display: block;
+    padding: 2px 4px;
+    background: rgba(185, 28, 28, 0.04);
+    border-radius: 3px;
+    margin: 2px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    opacity: 0.6;
+}
+
+.diff-after {
+    color: var(--accent);
+    display: block;
+    padding: 2px 4px;
+    background: var(--accent-light);
+    border-radius: 3px;
+    margin: 2px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+
+.diff-before mark {
+    background: rgba(185, 28, 28, 0.15);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+    text-decoration-line: line-through;
+}
+
+.diff-after mark {
+    background: rgba(22, 163, 74, 0.15);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+.diff-filename {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+.edits-site-section.collapsed .edits-site-container {
+    display: none;
+}
+
+.edits-site-header {
+    cursor: pointer;
+}
+
+.edits-site-toggle {
+    font-size: 14px !important;
+    color: var(--text-muted);
+    opacity: 0.5;
+    transition: transform 0.2s ease, opacity 0.15s;
+    user-select: none;
+}
+
+.edits-site-section.collapsed .edits-site-toggle {
+    transform: rotate(-90deg);
+}
+
+.edits-site-header:hover .edits-site-toggle {
+    opacity: 1;
+}
+
+
+button#editBtn {
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.2);
+}
+
+
+span.tier-label {
+    font-style: italic;
+    font-size: 12px;
+    padding-left: 4px;
+    position: relative;
+    top: 0px;
+    padding-right: 1px;
+}
+
+/* Empty state: smaller container */
+.edits-container:has(.edits-placeholder) {
     min-height: 80px;
 }
-
 
 
 
@@ -816,7 +943,10 @@ span.label-save {
 }
 
 
-
+div#settingsPanel {
+    height: 43px;
+    border-top: none;
+}
 
 .settings-panel {
     background: var(--settings-bg);
@@ -1053,7 +1183,21 @@ button#activateBtn:hover {
     font-size: 11px;
 }
 
+.edit-key-icon {
+    font-size: 14px !important;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.15s, color 0.15s;
+    position: relative;
+    top: 2px;
+    margin-left: 4px;
+}
 
+.edit-key-icon:hover {
+    opacity: 1;
+    color: var(--accent);
+}
 
 /* ===================== CONFIG PANEL ===================== */
 .config-panel {
@@ -1425,6 +1569,28 @@ button#activateBtn:hover {
 
 .file-item[data-url] {
     cursor: pointer;
+}
+
+/* ===================== TIER GATING (cascades from body[data-tier]) ===================== */
+/* Universal rule: tier-* elements only show when body[data-tier] matches */
+body[data-tier="free"] .tier-foundingMember,
+body[data-tier="free"] .tier-foundingVIP,
+body[data-tier="foundingMember"] .tier-free,
+body[data-tier="foundingMember"] .tier-foundingVIP,
+body[data-tier="foundingVIP"] .tier-free,
+body[data-tier="foundingVIP"] .tier-foundingMember {
+    display: none;
+}
+
+/* Add-site form: visible but greyed out without add-site capability */
+body:not([data-can-add-site]) .config-form input,
+body:not([data-can-add-site]) .config-form button[type="submit"] {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+body:not([data-can-add-site]) .config-form-hint {
+    opacity: 0.4;
 }
 
 .hidden {

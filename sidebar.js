@@ -38,8 +38,11 @@ const saveToCheckbox = document.getElementById('saveToCheckbox');
 const saveToSiteName = document.getElementById('saveToSiteName');
 const saveToPrompt = document.getElementById('saveToPrompt');
 const promptSiteName = document.getElementById('promptSiteName');
-const editsTextarea = document.getElementById('editsTextarea');
+const editsContainer = document.getElementById('editsContainer');
 const copyEditsBtn = document.getElementById('copyEditsBtn');
+
+const editsWrapper = document.getElementById('editsWrapper');
+const editsPlaceholder = document.getElementById('editsPlaceholder');
 
 // Track whether current site has a working repo connection
 let siteConnected = false;
@@ -149,45 +152,194 @@ grantAccessBtn.addEventListener('click', () => {
 // -------------------------------------------------------
 // Edit history: copy button
 // -------------------------------------------------------
-copyEditsBtn.addEventListener('click', () => {
-    const text = editsTextarea.value;
-    if (!text) return;
+// Delegated click handler for per-site copy and clear buttons
+editsWrapper.addEventListener('click', (e) => {
+    // Toggle collapse on header click (but not on action buttons)
+    const header = e.target.closest('.edits-site-header');
+    const action = e.target.closest('.edits-site-action');
 
-    navigator.clipboard.writeText(text).then(() => {
-        // Brief visual feedback
-        copyEditsBtn.textContent = 'check';
-        copyEditsBtn.classList.add('copied');
-        setTimeout(() => {
-            copyEditsBtn.textContent = 'content_copy';
-            copyEditsBtn.classList.remove('copied');
-        }, 1500);
-    }).catch(() => {
-        // Fallback: select the textarea for manual copy
-        editsTextarea.select();
-    });
+    if (header && !action) {
+        const section = header.closest('.edits-site-section');
+        if (section) section.classList.toggle('collapsed');
+        return;
+    }
+
+    if (!action) return;
+
+    const section = action.closest('.edits-site-section');
+    if (!section) return;
+
+    const container = section.querySelector('.edits-site-container');
+
+    // Copy action: build structured plain-text from diff entries
+    if (action.classList.contains('copy-action')) {
+        const siteKey = section.dataset.site;
+        const entries = container.querySelectorAll('.diff-entry');
+        if (!entries.length) return;
+
+        // Extract changed phrases (group consecutive marks into single strings)
+        function extractPhrases(el) {
+            const phrases = [];
+            let current = [];
+            for (const node of el.childNodes) {
+                if (node.nodeName === 'MARK') {
+                    current.push(node.textContent);
+                } else {
+                    if (current.length && node.textContent.trim() === '') {
+                        current.push(node.textContent);
+                    } else if (current.length) {
+                        const phrase = current.join('').trim();
+                        if (phrase) phrases.push(phrase);
+                        current = [];
+                    }
+                }
+            }
+            if (current.length) {
+                const phrase = current.join('').trim();
+                if (phrase) phrases.push(phrase);
+            }
+            return phrases;
+        }
+
+        const stripTags = (s) => s.replace(/<[^>]*>/g, '');
+
+        const lines = [];
+        entries.forEach(entry => {
+            const filename = entry.querySelector('.diff-filename');
+            const timestamp = entry.querySelector('.diff-timestamp');
+            const befores = entry.querySelectorAll('.diff-before');
+            const afters = entry.querySelectorAll('.diff-after');
+
+            const path = filename ? filename.textContent.trim() : '/';
+            const fullUrl = 'https://' + siteKey + path;
+
+            const removed = [];
+            const added = [];
+            befores.forEach(b => removed.push(...extractPhrases(b)));
+            afters.forEach(a => added.push(...extractPhrases(a)));
+
+            let summary = fullUrl;
+            if (removed.length || added.length) {
+                const parts = [];
+                if (removed.length) parts.push('removed "' + removed.map(stripTags).join('", "') + '"');
+                if (added.length) parts.push('added "' + added.map(stripTags).join('", "') + '"');
+                summary += ' - ' + parts.join(', ');
+            }
+            lines.push(summary);
+
+            for (let i = 0; i < Math.max(afters.length, befores.length); i++) {
+                if (afters[i]) lines.push('after edit:\n' + afters[i].textContent);
+                if (befores[i]) lines.push('before edit:\n' + befores[i].textContent);
+            }
+
+            const ts = timestamp ? timestamp.textContent.trim() : '';
+            lines.push('[edited ' + ts + ', with Blip https://blipcms.com]');
+            lines.push('');
+        });
+
+        const text = lines.join('\n');
+        navigator.clipboard.writeText(text).then(() => {
+            action.textContent = 'check';
+            action.classList.add('copied');
+            setTimeout(() => {
+                action.textContent = 'content_copy';
+                action.classList.remove('copied');
+            }, 1500);
+        });
+    }
+
+    // Clear action
+    if (action.classList.contains('clear-action')) {
+        section.remove();
+        // Show placeholder if no sections remain
+        if (!editsWrapper.querySelector('.edits-site-section')) {
+            const ph = document.createElement('p');
+            ph.id = 'editsPlaceholder';
+            ph.className = 'edits-placeholder';
+            ph.textContent = 'Your edits will appear here as you save changes.';
+            editsWrapper.appendChild(ph);
+        }
+        saveEditHistory();
+    }
 });
-
 
 // -------------------------------------------------------
 // Edit history: prepend a diff entry to the textarea
 // -------------------------------------------------------
-function appendDiffEntry(diffText) {
-    const current = editsTextarea.value;
+/**
+ * Append a diff entry (HTML string) to the correct per-site container.
+ * Creates the site section if it doesn't exist yet.
+ * diffHtml is expected to contain a .diff-header with the site hostname.
+ */
+function appendDiffEntry(diffHtml) {
+    // Remove global placeholder
+    if (editsPlaceholder) editsPlaceholder.remove();
 
-    // Prepend the new text
-    if (current) {
-        editsTextarea.value = diffText + '\n\n' + current;
-    } else {
-        editsTextarea.value = diffText;
+    // Extract hostname from the diff HTML's diff-header content
+    const tmp = document.createElement('div');
+    tmp.innerHTML = diffHtml;
+    const headerEl = tmp.querySelector('.diff-header');
+    const fullUrl = headerEl ? headerEl.textContent.trim() : 'unknown';
+    const siteKey = fullUrl.split('/')[0] || 'unknown';
+
+    // Collapse all other site sections (AFTER siteKey is defined)
+    editsWrapper.querySelectorAll('.edits-site-section').forEach(s => {
+        if (s.dataset.site !== siteKey) {
+            s.classList.add('collapsed');
+        }
+    });
+
+    // Find or create the per-site section
+    let section = editsWrapper.querySelector(`.edits-site-section[data-site="${siteKey}"]`);
+    // ... rest of function
+    if (!section) {
+        section = document.createElement('div');
+        section.className = 'edits-site-section';
+        section.dataset.site = siteKey;
+        section.innerHTML = `
+            <div class="edits-site-header">
+                <span class="edits-site-name">${escapeHtml(siteKey)}</span>
+                <span class="material-symbols-outlined edits-site-action copy-action" title="Copy edits">content_copy</span>
+                <span class="material-symbols-outlined edits-site-action clear-action" title="Clear edits">delete_outline</span>
+                <span class="material-symbols-outlined edits-site-toggle" title="Collapse/expand">expand_more</span>
+            </div>
+            <div class="edits-site-container"></div>
+        `;
+        // Prepend new sites at top
+        editsWrapper.prepend(section);
     }
 
-    // Auto-expand and scroll
-    editsTextarea.style.height = 'auto';
-    editsTextarea.style.height = Math.min(editsTextarea.scrollHeight, 500) + 'px';
-    editsTextarea.scrollTop = 0;
 
-    // Save to local storage
-    chrome.storage.local.set({ blipEditHistory: editsTextarea.value });
+    // Ensure current site section is expanded
+    section.classList.remove('collapsed');
+
+
+    // Move current site section to top of wrapper
+    editsWrapper.prepend(section);
+
+    // Prepend the diff entry into the site's container
+    const container = section.querySelector('.edits-site-container');
+    container.insertAdjacentHTML('afterbegin', diffHtml);
+    container.scrollTop = 0;
+
+    // Persist all edits
+    saveEditHistory();
+}
+
+/**
+ * Save all per-site edit history to chrome.storage.local.
+ * Stores as { 'site.com': '<html>...', ... }
+ */
+function saveEditHistory() {
+    const data = {};
+    editsWrapper.querySelectorAll('.edits-site-section').forEach(section => {
+        const site = section.dataset.site;
+        const container = section.querySelector('.edits-site-container');
+        if (container && container.innerHTML.trim()) {
+            data[site] = container.innerHTML;
+        }
+    });
+    chrome.storage.local.set({ blipEditHistory: data });
 }
 
 // -------------------------------------------------------
@@ -225,8 +377,11 @@ cancelAddSite.addEventListener('click', () => {
 siteForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const siteUrl = document.getElementById('fieldSiteUrl').value.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const owner = document.getElementById('fieldOwner').value.trim();
-    const repo = document.getElementById('fieldRepo').value.trim();
+    // Split "owner/repo" into parts from single field
+    const repoRaw = document.getElementById('fieldRepo').value.trim();
+    const slashIdx = repoRaw.indexOf('/');
+    const owner = slashIdx > 0 ? repoRaw.slice(0, slashIdx).trim() : '';
+    const repo = slashIdx > 0 ? repoRaw.slice(slashIdx + 1).trim() : '';
     const branch = document.getElementById('fieldBranch').value.trim() || 'main';
     const token = document.getElementById('fieldToken').value.trim();
 
@@ -298,18 +453,17 @@ function showCollapsedView() {
     expandedView.classList.add('hidden');
 }
 
+// Expose collapse for inline onclick handlers (Stripe purchase links)
+window.collapseSidebar = function () {
+    sendToContent('closeSidebar');
+};
+
 function showExpandedView() {
     document.body.classList.add('sidebar-expanded');
     expandedView.classList.remove('hidden');
     collapsedView.classList.add('hidden');
 
-    // Recalculate text area height after the sidebar paints
-    setTimeout(() => {
-        if (editsTextarea && editsTextarea.value) {
-            editsTextarea.style.height = 'auto';
-            editsTextarea.style.height = Math.min(editsTextarea.scrollHeight, 500) + 'px';
-        }
-    }, 50);
+
 }
 
 // -------------------------------------------------------
@@ -543,6 +697,36 @@ window.addEventListener('message', (event) => {
     if (msg.source !== 'blip-content') return;
 
     switch (msg.action) {
+        case 'mappingEstimate':
+            editBtn.disabled = true;
+            let remaining = Math.ceil(msg.estimatedMs / 1000);
+            const labels = ['Mapping'];
+            let labelIdx = 0;
+            const hint = remaining > 10 ? ' (large page)' : '';
+            editBtn.textContent = `${labels[0]}... ~${remaining}s${hint}`;
+            const countdownInterval = setInterval(() => {
+                remaining--;
+                labelIdx = 1 - labelIdx;
+                if (remaining <= 0) {
+                    clearInterval(countdownInterval);
+                    editBtn.textContent = 'Almost ready...';
+                } else {
+                    editBtn.textContent = `${labels[labelIdx]}... ~${remaining}s`;
+                }
+            }, 1000);
+            window._blipCountdownInterval = countdownInterval;
+            break;
+        case 'hostInfo':
+            // Auto-expand edits section for current site, collapse others, bubble to top
+            editsWrapper.querySelectorAll('.edits-site-section').forEach(s => {
+                if (s.dataset.site === msg.hostname) {
+                    s.classList.remove('collapsed');
+                    editsWrapper.prepend(s);
+                } else {
+                    s.classList.add('collapsed');
+                }
+            });
+            break;
         case 'collapse':
             showCollapsedView();
             break;
@@ -553,6 +737,10 @@ window.addEventListener('message', (event) => {
             setTabState(msg.state);
             break;
         case 'editStarted':
+            if (window._blipCountdownInterval) {
+                clearInterval(window._blipCountdownInterval);
+                window._blipCountdownInterval = null;
+            }
             showEditing();
             break;
         case 'editsDetected':
@@ -562,8 +750,8 @@ window.addEventListener('message', (event) => {
             showDefault();
             if (isLocalFileMode && siteConnected) {
                 showNotification('Saved to file');
-            } else if (siteConnected) {
-                showNotification('Saved');
+            } else if (siteConnected && currentSiteUrl) {
+                showNotification('Saved to ' + currentSiteUrl);
             } else {
                 showNotification('Saved to Blip');
             }
@@ -599,7 +787,8 @@ window.addEventListener('message', (event) => {
             updateFileList(msg.resolvedFile, msg.editableFiles, msg.siteUrl, msg.connected);
             break;
         case 'noSiteConfig':
-            editBtn.disabled = true;
+            // No repo configured for this site.
+            // Do NOT disable editing - free users can still edit (freemium DOM-only mode).
             siteConnected = false;
             currentSiteUrl = window.location ? window.location.hostname : null;
             fileList.innerHTML = '<p class="file-list-hint">Connect a GitHub repo in Settings to enable saving.</p>';
@@ -617,6 +806,44 @@ window.addEventListener('message', (event) => {
             break;
         case 'localFileStatus':
             handleLocalFileStatus(msg);
+            break;
+        case 'licenseActivated':
+            // Activation succeeded - update UI, reset buttons
+            setLicenseState({ [msg.tier]: true }, msg.key);
+            activateBtn.disabled = false;
+            activateBtn.textContent = 'Activate Pro';
+            if (upgradeBtn) {
+                upgradeBtn.disabled = false;
+                upgradeBtn.textContent = 'Activate VIP';
+            }
+            // Reset edit-key form if it was used
+            if (editKeyForm) {
+                editKeyForm.classList.add('hidden');
+                editKeyInput.value = '';
+                editKeyActivateBtn.disabled = false;
+                editKeyActivateBtn.textContent = 'Activate';
+            }
+            if (editKeyBtn) editKeyBtn.classList.remove('hidden');
+            if (maskedKeyDisplay) maskedKeyDisplay.classList.remove('hidden');
+            break;
+        case 'licenseError':
+            // Activation failed - show error, reset buttons
+            if (msg.error === 'network') {
+                activateError.textContent = 'We couldn\'t verify your key right now. This is usually temporary - try again in a moment, or email support@blipcms.com';
+            } else {
+                activateError.textContent = 'We couldn\'t verify this key. Please double-check it and try again, or email support@blipcms.com';
+            }
+            activateError.classList.remove('hidden');
+            activateBtn.disabled = false;
+            activateBtn.textContent = 'Activate Pro';
+            if (upgradeBtn) {
+                upgradeBtn.disabled = false;
+                upgradeBtn.textContent = 'Activate VIP';
+            }
+            if (editKeyActivateBtn) {
+                editKeyActivateBtn.disabled = false;
+                editKeyActivateBtn.textContent = 'Activate';
+            }
             break;
     }
 });
@@ -667,38 +894,59 @@ function handleLocalFileStatus(msg) {
 // License panel: set UI state based on stored membership
 // -------------------------------------------------------
 function setLicenseState(membership, licenseKey) {
-    // Hide all states first
-    unlicensedState.classList.add('hidden');
-    memberState.classList.add('hidden');
-    vipState.classList.add('hidden');
+    // Determine tier
+    let tier = 'free';
+    if (membership && membership.foundingVIP) tier = 'foundingVIP';
+    else if (membership && membership.foundingMember) tier = 'foundingMember';
 
-    if (membership && membership.foundingVIP) {
-        // VIP: collapsed panel, just show the active badge
-        licenseActiveBadge.classList.remove('hidden');
-        vipState.classList.remove('hidden');
-        configPanel.style.display = 'flex';
+    // Set tier on body - CSS handles all show/hide from here
+    document.body.setAttribute('data-tier', tier);
 
-    } else if (membership && membership.foundingMember) {
-        // Member: show key (masked), upgrade button
-        licenseActiveBadge.classList.remove('hidden');
-        memberState.classList.remove('hidden');
-        if (licenseKey) {
-            // Show first 8 chars then mask the rest
-            maskedKeyDisplay.textContent = licenseKey.substring(0, 8) + '••••••••••••••••••••';
+    // Set capability flags from config
+    const caps = BLIP_CONFIG.capabilities[tier] || [];
+    const allCaps = ['github-commit', 'local-file-edit', 'add-site', 'unlimited-sites'];
+    for (const cap of allCaps) {
+        const attr = 'data-can-' + cap;
+        if (caps.includes(cap)) {
+            document.body.setAttribute(attr, '');
+        } else {
+            document.body.removeAttribute(attr);
         }
-        configPanel.style.display = 'flex';
+    }
 
-    } else {
-        // Unlicensed: show buy + activate
-        unlicensedState.classList.remove('hidden');
+    // The few things CSS can't do: set masked key text, disable form inputs
+    if (tier !== 'free' && licenseKey) {
+        maskedKeyDisplay.textContent = licenseKey.substring(0, 8) + '••••••••••••••••••••';
+    }
+
+    // Disable form inputs for free users (CSS greys them out, this prevents submission)
+    const formFields = siteForm.querySelectorAll('input, button[type="submit"]');
+    formFields.forEach(el => { el.disabled = !caps.includes('add-site'); });
+
+    // Pro tiers: collapse license panel by default
+    if (tier === 'foundingVIP' || tier === 'foundingMember') {
+        licensePanel.classList.add('collapsed');
+    }
+
+    // Founding Member: disable add-site if they already have one configured
+    if (tier === 'foundingMember') {
+        chrome.storage.local.get(['blipSites'], (result) => {
+            const sites = result.blipSites || [];
+            if (sites.length >= 1) {
+                document.body.removeAttribute('data-can-add-site');
+                const fields = siteForm.querySelectorAll('input, button[type="submit"]');
+                fields.forEach(el => { el.disabled = true; });
+            }
+        });
     }
 }
 
 
+
 // -------------------------------------------------------
-// License activation
+// License activation (routes through content.js -> licensing.js -> background.js)
 // -------------------------------------------------------
-activateBtn.addEventListener('click', async () => {
+activateBtn.addEventListener('click', () => {
     const key = licenseKeyInput.value.trim();
     if (!key) return;
 
@@ -706,59 +954,102 @@ activateBtn.addEventListener('click', async () => {
     activateBtn.textContent = 'Checking...';
     activateError.classList.add('hidden');
 
-    try {
-        const res = await fetch('https://my.remaphq.com/webhook/validate-blip-license', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key })
-        });
-        const data = await res.json();
-
-        if (data.valid) {
-            // Write tier and key to storage
-            const membership = { [data.tier]: true };
-            chrome.storage.local.set({ blipMembership: membership, blipLicenseKey: key });
-            setLicenseState(membership, key);
-        } else {
-            activateError.classList.remove('hidden');
-        }
-    } catch (err) {
-        activateError.textContent = 'Could not connect. Check your internet and try again.';
-        activateError.classList.remove('hidden');
-    }
-
-    activateBtn.disabled = false;
-    activateBtn.textContent = 'Activate';
+    sendToContent('activateKey', { key });
 });
 
+// Upgrade button (Founding Member -> VIP)
+const upgradeKeyInput = document.getElementById('upgradeKeyInput');
+const upgradeBtn = document.getElementById('upgradeBtn');
 
+if (upgradeBtn) {
+    upgradeBtn.addEventListener('click', () => {
+        const key = upgradeKeyInput.value.trim();
+        if (!key) return;
+
+        upgradeBtn.disabled = true;
+        upgradeBtn.textContent = 'Checking...';
+
+        sendToContent('activateKey', { key });
+    });
+}
+
+// Edit key: toggle between masked display and re-entry form
+const editKeyBtn = document.getElementById('editKeyBtn');
+const editKeyForm = document.getElementById('editKeyForm');
+const editKeyInput = document.getElementById('editKeyInput');
+const editKeyActivateBtn = document.getElementById('editKeyActivateBtn');
+
+if (editKeyBtn) {
+    editKeyBtn.addEventListener('click', () => {
+        maskedKeyDisplay.classList.add('hidden');
+        editKeyBtn.classList.add('hidden');
+        editKeyForm.classList.remove('hidden');
+        editKeyInput.focus();
+    });
+}
+
+if (editKeyActivateBtn) {
+    editKeyActivateBtn.addEventListener('click', () => {
+        const key = editKeyInput.value.trim();
+        if (!key) return;
+        editKeyActivateBtn.disabled = true;
+        editKeyActivateBtn.textContent = 'Checking...';
+        sendToContent('activateKey', { key });
+    });
+}
+const editKeyCancelBtn = document.getElementById('editKeyCancelBtn');
+if (editKeyCancelBtn) {
+    editKeyCancelBtn.addEventListener('click', () => {
+        editKeyForm.classList.add('hidden');
+        editKeyInput.value = '';
+        maskedKeyDisplay.classList.remove('hidden');
+        editKeyBtn.classList.remove('hidden');
+    });
+}
 
 // Init: load saved sites into config panel
 renderSavedSites();
 
 // Load persisted edit history
+// Restore per-site edit history
 chrome.storage.local.get(['blipEditHistory'], (result) => {
-    if (result.blipEditHistory) {
-        editsTextarea.value = result.blipEditHistory;
+    const data = result.blipEditHistory;
+    if (!data) return;
 
-        // Wait a tick for the DOM to paint before calculating scrollHeight
-        setTimeout(() => {
-            editsTextarea.style.height = 'auto';
-            editsTextarea.style.height = Math.min(editsTextarea.scrollHeight, 500) + 'px';
-            editsTextarea.scrollTop = 0;
-        }, 50);
+    // Handle legacy format (plain string from old textarea)
+    if (typeof data === 'string') {
+        // Migrate: clear old format, user starts fresh with new per-site system
+        chrome.storage.local.remove('blipEditHistory');
+        return;
+    }
+
+    // New format: { 'site.com': '<html>...' }
+    const sites = Object.keys(data);
+    if (sites.length === 0) return;
+
+    // Remove placeholder
+    if (editsPlaceholder) editsPlaceholder.remove();
+
+    for (const siteKey of sites) {
+        const section = document.createElement('div');
+        section.className = 'edits-site-section';
+        section.dataset.site = siteKey;
+        section.innerHTML = `
+            <div class="edits-site-header">
+                <span class="edits-site-name">${escapeHtml(siteKey)}</span>
+                <span class="material-symbols-outlined edits-site-action copy-action" title="Copy edits">content_copy</span>
+                <span class="material-symbols-outlined edits-site-action clear-action" title="Clear edits">delete_outline</span>
+                <span class="material-symbols-outlined edits-site-toggle" title="Collapse/expand">expand_more</span>
+            </div>
+            <div class="edits-site-container">${data[siteKey]}</div>
+        `;
+        editsWrapper.appendChild(section);
     }
 });
 
 
-const clearHistoryBtn = document.getElementById('clear-history-btn');
-if (clearHistoryBtn) {
-    clearHistoryBtn.addEventListener('click', () => {
-        editsTextarea.value = '';
-        editsTextarea.style.height = 'auto';
-        chrome.storage.local.remove('blipEditHistory');
-    });
-}
+// Global "Clear edits" button is removed from HTML.
+// Per-site clear buttons handle clearing via the delegated handler above
 
 
 // Load license state on init

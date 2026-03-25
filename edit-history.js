@@ -16,9 +16,75 @@
  * @param {Array<{before: string, after: string}>} snippets - before/after pairs
  * @returns {string} formatted diff text
  */
-function formatDiffEntry(url, filename, snippets) {
-    const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
+/**
+ * Word-level inline diff. Returns { beforeHtml, afterHtml } with
+ * changed words wrapped in <mark> tags.
+ */
+function inlineDiff(beforeStr, afterStr) {
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const beforeWords = beforeStr.split(/(\s+)/);
+    const afterWords = afterStr.split(/(\s+)/);
+
+    // Simple LCS-based word diff
+    const m = beforeWords.length;
+    const n = afterWords.length;
+
+    // Build LCS table
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (beforeWords[i - 1] === afterWords[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+
+    // Backtrack to find which words are common
+    const beforeFlags = new Array(m).fill(false); // true = changed
+    const afterFlags = new Array(n).fill(false);
+    let i = m, j = n;
+    while (i > 0 && j > 0) {
+        if (beforeWords[i - 1] === afterWords[j - 1]) {
+            i--; j--;
+        } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+            beforeFlags[i - 1] = true;
+            i--;
+        } else {
+            afterFlags[j - 1] = true;
+            j--;
+        }
+    }
+    while (i > 0) { beforeFlags[i - 1] = true; i--; }
+    while (j > 0) { afterFlags[j - 1] = true; j--; }
+
+    // Build HTML with highlights
+    let beforeHtml = '';
+    for (let k = 0; k < m; k++) {
+        if (beforeFlags[k]) {
+            beforeHtml += '<mark>' + esc(beforeWords[k]) + '</mark>';
+        } else {
+            beforeHtml += esc(beforeWords[k]);
+        }
+    }
+
+    let afterHtml = '';
+    for (let k = 0; k < n; k++) {
+        if (afterFlags[k]) {
+            afterHtml += '<mark>' + esc(afterWords[k]) + '</mark>';
+        } else {
+            afterHtml += esc(afterWords[k]);
+        }
+    }
+
+    return { beforeHtml, afterHtml };
+}
+
+
+function formatDiffEntry(url, filename, snippets) {
     const d = new Date();
     d.setUTCHours(d.getUTCHours() - 5);
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -31,17 +97,26 @@ function formatDiffEntry(url, filename, snippets) {
     hours = hours % 12 || 12;
     const publicTimestamp = `${month} ${day} ${year}, ${hours}:${minutes} ${ampm} EST`;
 
-    // Clean the URL: strip http(s):// and trailing slashes/hashes
     const cleanUrl = url.replace(/^https?:\/\//, '').replace(/[\/#]+$/, '');
 
-    let entry = `Blip edit of ${cleanUrl}:\n`;
-
-    for (const snippet of snippets) {
-        entry += `\n*Before*\n${snippet.before}\n\n*After*\n${snippet.after}\n`;
+    // Helper to escape HTML in user content
+    function esc(str) {
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    entry += `\n- edited on ${publicTimestamp} -\n`;
-    return entry;
+    let snippetHtml = '';
+    for (const snippet of snippets) {
+        const { beforeHtml, afterHtml } = inlineDiff(snippet.before, snippet.after);
+        snippetHtml += `<span class="diff-after">${afterHtml}</span>`;
+        snippetHtml += `<span class="diff-before">${beforeHtml}</span>`;
+    }
+
+    return `<div class="diff-entry">
+        <div class="diff-header">${esc(cleanUrl)}</div>
+        <div class="diff-filename">${esc(filename)}</div>
+        ${snippetHtml}
+        <div class="diff-timestamp">${esc(publicTimestamp)}</div>
+    </div>`;
 }
 
 // -------------------------------------------------------

@@ -16,7 +16,7 @@
 ### Core editing mechanism
 ### UI states
 ### UI design
-### Account and configuration
+### Licensing and billing
 ### Current state
 ### Features
 ### Roadmap
@@ -202,7 +202,7 @@ Blip cannot map edits back to relational databases, as would be necessary for tr
 
 ## Blip Architecture
 
-Nothing described in the Roadmap has been built, apart from a portion of the membership functionality.
+
 
 ### Chrome extension structure
 
@@ -263,6 +263,9 @@ This architecture solves a critical problem: `document.designMode = 'on'` on the
 
 **State persistence:** The sidebar's collapsed/expanded state is persisted to `chrome.storage.local` with a 30-minute expiry. Within that window, navigating between pages preserves the sidebar state. After 30 minutes of inactivity, the sidebar reverts to the default (collapsed).
 
+
+
+
 ## User onboarding experience
 
 ### Freemium (default)
@@ -279,7 +282,7 @@ This architecture solves a critical problem: `document.designMode = 'on'` on the
 6. User visits a configured site. The file list shows with a `sync` icon confirming the connection. Files in the list are clickable for navigation.
 7. Saves commit directly to GitHub. The "save to repo" checkbox defaults to checked.
 
-### Membership tiers
+### Pro tiers
 
 - **Founding Member** - one connected site, GitHub commit, local file editing
 - **Founding VIP** - unlimited connected sites, all Founding Member features
@@ -470,6 +473,19 @@ For SHA conflicts (409), Blip automatically re-fetches the latest version from G
 - **Ready** - folder access granted, file loaded. Edit button enabled, "Saving to [filename]" shown during edit.
 - **Not Pro** - `file:///` page without a Pro license. Falls through to freemium mode (edit + accumulate diffs, no save to disk).
 
+
+### Site configuration
+
+- GitHub repo owner, repo name, branch, and personal access token are configured per-site via the Manage Sites form in the sidebar.
+- Multiple site-to-repo mappings are supported (VIP tier: unlimited; Member tier: one site).
+- Freemium users can save to local files only. They can Pro features in disabled state (Save to repo, Manage/add sites, etc)
+- File path is resolved dynamically: Blip fetches the repo's file listing at init, filters to editable extensions, and matches the current URL path to a file. Template files and config directories are excluded via configurable patterns.
+- Branch mapping defaults to `main` but can be configured per-site.
+- All configuration data is stored in `chrome.storage.local`.
+
+
+
+
 ### Dev panel
 
 The dev panel is a diagnostic tool that shows real-time information about the editing session: file resolution, source loading, diff strategy selection, mutation tracking, save transactions, and error details. It is toggled via `chrome.storage.local`:
@@ -484,6 +500,17 @@ chrome.storage.local.set({ blipDev: false });
 The `dev.enabled` flag in `config.js` controls whether dev log messages are sent to the sidebar. Both must be true for the panel to show logs.
 
 ## UI design
+
+
+### Design principles
+
+- Minimal. The sidebar should feel like a tool strip, not an application.
+- The edit button is the dominant element in default state. Everything else is secondary.
+- In editing state, save and cancel are equally accessible. Neither should require scrolling.
+- Dev notifications should be visually distinct from user-facing UI (muted color, smaller font, monospace) so they are clearly diagnostic.
+- The sidebar should have its own scroll if content overflows, independent of the page scroll.
+- Light, airy green palette. Translucent backgrounds throughout. The aesthetic is unobtrusive and bright, not heavy or dark.
+
 
 ### Sidebar layout
 
@@ -532,25 +559,9 @@ When the sidebar is collapsed, a small floating tab at top-left provides a mini 
 
 The tab controls delegate actions to content.js. The expand icon (>>) opens the full sidebar.
 
-### Design principles
 
-- Minimal. The sidebar should feel like a tool strip, not an application.
-- The edit button is the dominant element in default state. Everything else is secondary.
-- In editing state, save and cancel are equally accessible. Neither should require scrolling.
-- Dev notifications should be visually distinct from user-facing UI (muted color, smaller font, monospace) so they are clearly diagnostic.
-- The sidebar should have its own scroll if content overflows, independent of the page scroll.
-- Light, airy green palette: `#eef3ed` background, `#16a34a` accent. Translucent backgrounds throughout. The aesthetic is unobtrusive and bright, not heavy or dark.
 
-## Account and configuration
-
-### Site configuration
-
-- GitHub repo owner, repo name, branch, and personal access token are configured per-site via the Manage Sites form in the sidebar.
-- Multiple site-to-repo mappings are supported (VIP tier: unlimited; Member tier: one site).
-- File path is resolved dynamically: Blip fetches the repo's file listing at init, filters to editable extensions, and matches the current URL path to a file. Template files and config directories are excluded via configurable patterns.
-- All configuration data is stored in `chrome.storage.local`.
-
-### Licensing and billing
+## Licensing and billing
 
 - License keys are generated via a Stripe webhook -> n8n workflow -> UUID key generation -> Gmail notification pipeline.
 - Users enter their key in the Blip Pro panel and click Activate.
@@ -604,7 +615,6 @@ All use cases (## Use cases) are currently viable except:
 - Stripe + license key integration (end-to-end flow)
 - Grey out "add site" form if no license
 - Design enhancements, in sync with existing www.blipcms.com website design refresh
-- Extract product-strategy.md and let specs.md be more narrowly confined to specs (do just before submitting to CWS)
 - Manual QA
 
 ### Launch
@@ -614,6 +624,7 @@ All use cases (## Use cases) are currently viable except:
 - Write listing copy
 - Prepare terms and conditions, privacy policy pages
 - Secure @blipcms.com email address
+- Extract product-strategy.md, and roadmap.md, and let specs.md be more narrowly confined to specs: prune ## Use Cases, Philosophy, and Compatibility sections, and remove ## Roadmap entirely
 - Submit to CWS
 - Monitor CWS review process
 - Address any issues raised by CWS review

@@ -2,6 +2,13 @@
 // Handles GitHub API calls on behalf of the content script.
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'VALIDATE_LICENSE') {
+    validateLicense(message.key)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true; // keep channel open for async response
+  }
+
   if (message.type === 'GITHUB_FETCH') {
     githubFetchFile(message.config)
       .then(result => sendResponse({ success: true, data: result }))
@@ -115,6 +122,23 @@ async function githubCommitFile(config, newContent, sha) {
     commitMessage: commitMessage,
     commitUrl: data.commit.html_url
   };
+}
+
+// -------------------------------------------------------
+// License validation (called from content scripts via message)
+// -------------------------------------------------------
+async function validateLicense(key) {
+  const response = await fetch('https://my.remaphq.com/webhook/validate-blip-license', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Validation request failed (${response.status})`);
+  }
+
+  return await response.json();
 }
 
 chrome.action.onClicked.addListener((tab) => {

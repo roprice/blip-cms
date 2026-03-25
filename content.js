@@ -37,6 +37,7 @@ function injectSidebar() {
   sidebarFrame.id = 'blip-sidebar-frame';
   sidebarFrame.src = chrome.runtime.getURL('sidebar.html');
   sidebarFrame.setAttribute('allowtransparency', 'true');
+  sidebarFrame.setAttribute('allow', 'clipboard-write');
 
   // Restore saved position
   chrome.storage.local.get(['blipTabY'], (result) => {
@@ -98,7 +99,7 @@ async function getSidebarState() {
       chrome.storage.local.get(['blipSidebarState', 'blipSidebarTimestamp'], (result) => {
         if (chrome.runtime.lastError || !result.blipSidebarState) { resolve(null); return; }
         const age = Date.now() - (result.blipSidebarTimestamp || 0);
-        if (age > 30 * 60 * 1000) { resolve(null); return; }
+        if (age > 30 * 24 * 60 * 60 * 1000) { resolve(null); return; }
         resolve(result.blipSidebarState);
       });
     } catch (e) { resolve(null); }
@@ -140,7 +141,7 @@ function handleSidebarMessage(event) {
       document.body.style.userSelect = 'none';
       sidebarFrame.style.pointerEvents = 'none';
       break;
-    case 'ready': sendInitialDevLogs(); break;
+    case 'ready': sendInitialDevLogs(); if (isLocalMode) initLocalEditing(); break;
     case 'startEdit': startEditSession(); break;
     case 'save':
       // Route: local mode goes to saveLocalEdits (in local-fs.js),
@@ -157,11 +158,13 @@ function handleSidebarMessage(event) {
     case 'expandSidebar': expandSidebar(); break;
     case 'reloadPage': window.location.reload(); break;
     case 'grantLocalAccess': handleGrantLocalAccess(); break;
+    case 'activateKey': handleActivateKey(msg.key); break;
     case 'navigateTo': window.location.href = msg.url; break;
   }
 }
 
 function sendInitialDevLogs() {
+  sendToSidebar('hostInfo', { hostname: window.location.hostname.replace('www.', '') });
   devLog('Site', window.location.hostname || 'local file', 'success');
   if (githubConfig) {
     devLog('Repo', `${githubConfig.owner}/${githubConfig.repo}`, '');
@@ -300,7 +303,20 @@ async function startEditSession() {
     sourceDOM = parser.parseFromString(sourceContent, 'text/html');
     devLog('Parsed source', `${sourceDOM.body.querySelectorAll('*').length} elements`, 'success');
 
+    // Estimate mapping time and notify sidebar
+    const elementCount = sourceDOM.body.querySelectorAll('*').length;
+    const estimatedMs = Math.round(elementCount * 12); // ~12ms per element observed on heavy sites
+    if (estimatedMs > 3000) {
+      sendToSidebar('mappingEstimate', { estimatedMs, elementCount });
+    }
+
+    // Defer mapping by one tick so the sidebar can render the countdown
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const mapStart = Date.now();
     buildTextNodeMap(document.body, sourceContent);
+    const mapTime = Date.now() - mapStart;
+    devLog('Map time', `${mapTime}ms for ${elementCount} elements (${(mapTime / elementCount).toFixed(1)}ms/el)`, 'success');
     interceptPaste();
     startObserving();
 
@@ -320,6 +336,11 @@ async function startEditSession() {
     document.designMode = 'on';
     document.documentElement.classList.add('blip-editing');
     isEditing = true;
+
+    devLog('Mode', 'designMode ON, body editable', 'success', 'edit-mode');
+
+
+
 
     devLog('Mode', 'designMode ON, body editable', 'success', 'edit-mode');
     sendToSidebar('editStarted');
@@ -426,7 +447,7 @@ async function saveEdits(commitToRepo = true) {
 
         const diffText = formatDiffEntry(
           window.location.href,
-          resolvedFilePath || 'unknown',
+          resolvedFilePath || window.location.pathname || '/',
           diffResult.snippets
         );
         sendToSidebar('diffEntry', { diffText });
@@ -477,7 +498,7 @@ async function saveEdits(commitToRepo = true) {
     const diffSnippets = buildDiffSnippets(sourceContent, allReplacements);
     const diffText = formatDiffEntry(
       window.location.href,
-      resolvedFilePath || 'unknown',
+      resolvedFilePath || window.location.pathname || '/',
       diffSnippets
     );
     sendToSidebar('diffEntry', { diffText });
@@ -652,6 +673,18 @@ function exitEditMode() {
 }
 
 // -------------------------------------------------------
+// License activation relay (sidebar -> licensing.js -> background.js)
+// -------------------------------------------------------
+async function handleActivateKey(key) {
+  const result = await activateKey(key);
+  if (result.success) {
+    sendToSidebar('licenseActivated', { tier: result.tier, key });
+  } else {
+    sendToSidebar('licenseError', { error: result.error });
+  }
+}
+
+// -------------------------------------------------------
 // Initialize
 // -------------------------------------------------------
 function init() {
@@ -661,7 +694,7 @@ function init() {
   // Check if this is a local file before trying GitHub config
   if (isLocalFile()) {
     isLocalMode = true;
-    initLocalEditing();
+    // initLocalEditing() is called later when sidebar sends 'ready'
   } else {
     loadSiteConfig(currentHost);
   }
