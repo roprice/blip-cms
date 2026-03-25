@@ -92,7 +92,8 @@ function inlineDiff(beforeStr, afterStr) {
   }
   // Merge consecutive <mark> tags (including whitespace-only marks between them)
   const merge = (html) => html.replace(/<\/mark>(\s*)<mark>/g, "$1");
-  before;
+  beforeHtml = merge(beforeHtml);
+  afterHtml = merge(afterHtml);
 
   return { beforeHtml, afterHtml };
 }
