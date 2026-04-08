@@ -3,53 +3,18 @@
   "name": "Blip",
   "version": "0.1.0",
   "description": "True edit-in-place for flat-file websites. Edit your live site, commit to GitHub.",
-  "permissions": [
-    "storage",
-    "activeTab"
-  ],
+  "permissions": ["storage", "activeTab", "scripting"],
   "action": {
     "default_title": "Toggle Blip"
   },
-  "host_permissions": [
-    "https://api.github.com/*",
-    "https://my.remaphq.com/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "config.js",
-        "licensing.js",
-        "github.js",
-        "file-resolver.js",
-        "mapping.js",
-        "edit-history.js",
-        "text-diff.js",
-        "local-fs.js",
-        "content.js"
-      ],
-      "css": [
-        "content.css"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
+  "host_permissions": ["https://api.github.com/*", "https://my.remaphq.com/*"],
   "background": {
     "service_worker": "background.js"
   },
   "web_accessible_resources": [
     {
-      "resources": [
-        "sidebar.html",
-        "sidebar.js",
-        "sidebar.css",
-        "config.js"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
+      "resources": ["sidebar.html", "sidebar.js", "sidebar.css", "config.js"],
+      "matches": ["<all_urls>"]
     }
   ],
   "icons": {
