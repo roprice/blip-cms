@@ -122,8 +122,15 @@ function formatDiffEntry(url, filename, snippets) {
   const minutes = d.getUTCMinutes().toString().padStart(2, "0");
   const ampm = hours >= 12 ? "pm" : "am";
   hours = hours % 12 || 12;
-  const publicTimestamp = `${month} ${day} ${year}, ${hours}:${minutes} ${ampm} EST`;
-
+  const publicTimestamp = new Date().toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  });
   const cleanUrl = url.replace(/^https?:\/\//, "").replace(/[\/#]+$/, "");
 
   // Helper to escape HTML in user content
