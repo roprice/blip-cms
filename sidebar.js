@@ -1079,6 +1079,19 @@ chrome.storage.local.get(["blipEditHistory"], (result) => {
         `;
     editsWrapper.appendChild(section);
   }
+
+  // Re-apply current-site prioritization (hostInfo may have fired before storage restored)
+  if (currentSiteUrl) {
+    const hostname = currentSiteUrl.replace(/^www\./, "");
+    editsWrapper.querySelectorAll(".edits-site-section").forEach((s) => {
+      if (s.dataset.site === hostname) {
+        s.classList.remove("collapsed");
+        editsWrapper.prepend(s);
+      } else {
+        s.classList.add("collapsed");
+      }
+    });
+  }
 });
 
 // Global "Clear edits" button is removed from HTML.
