@@ -1577,6 +1577,10 @@ body[data-tier="free"] .config-empty {
     display: none;
 }
 
+body[data-tier="free"] .dev-panel {
+    display: none;
+}
+
 body:not([data-can-add-site]) .config-form-hint {
     opacity: 0.4;
 }
