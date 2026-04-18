@@ -1560,6 +1560,23 @@ body:not([data-can-add-site]) .config-form button[type="submit"] {
     pointer-events: none;
 }
 
+.form-header {
+    display: none;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+body[data-tier="free"] .form-header.free {
+    display: block;
+}
+body[data-tier="foundingMember"] .form-header.founding-member {
+    display: block;
+}
+
+body[data-tier="free"] .config-empty {
+    display: none;
+}
+
 body:not([data-can-add-site]) .config-form-hint {
     opacity: 0.4;
 }
