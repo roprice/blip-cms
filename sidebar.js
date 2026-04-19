@@ -220,10 +220,8 @@ editsWrapper.addEventListener("click", (e) => {
       let summary = fullUrl;
       if (removed.length || added.length) {
         const parts = [];
-        if (removed.length)
-          parts.push('removed "' + removed.map(stripTags).join('", "') + '"');
-        if (added.length)
-          parts.push('added "' + added.map(stripTags).join('", "') + '"');
+        if (removed.length) parts.push('removed "' + removed.map(stripTags).join('", "') + '"');
+        if (added.length) parts.push('added "' + added.map(stripTags).join('", "') + '"');
         summary += " - " + parts.join(", ");
       }
       lines.push(summary);
@@ -291,9 +289,7 @@ function appendDiffEntry(diffHtml) {
   });
 
   // Find or create the per-site section
-  let section = editsWrapper.querySelector(
-    `.edits-site-section[data-site="${siteKey}"]`,
-  );
+  let section = editsWrapper.querySelector(`.edits-site-section[data-site="${siteKey}"]`);
   // ... rest of function
   if (!section) {
     section = document.createElement("div");
@@ -414,6 +410,11 @@ siteForm.addEventListener("submit", async (e) => {
   addSiteForm.classList.add("hidden");
   addSiteBtn.classList.remove("hidden");
   renderSavedSites(sites);
+
+  // Re-evaluate license caps (e.g. founding member 1-site limit)
+  chrome.storage.local.get(["blipMembership", "blipLicenseKey"], (result) => {
+    setLicenseState(result.blipMembership || null, result.blipLicenseKey || null);
+  });
 });
 
 async function renderSavedSites(sites) {
@@ -425,8 +426,7 @@ async function renderSavedSites(sites) {
   }
 
   if (sites.length === 0) {
-    savedSitesList.innerHTML =
-      '<p class="config-empty">No sites configured yet.</p>';
+    savedSitesList.innerHTML = '<p class="config-empty">No sites configured yet.</p>';
     return;
   }
 
@@ -450,6 +450,11 @@ async function renderSavedSites(sites) {
         chrome.storage.local.set({ blipSites: sites }, resolve);
       });
       renderSavedSites(sites);
+
+      // Re-evaluate license caps (e.g. founding member can add again after deleting)
+      chrome.storage.local.get(["blipMembership", "blipLicenseKey"], (result) => {
+        setLicenseState(result.blipMembership || null, result.blipLicenseKey || null);
+      });
     });
   });
 }
@@ -653,9 +658,7 @@ function renderAllSites() {
 
     for (const fileName of sorted) {
       const isActive = fileName === siteData.resolvedFile;
-      const fileUrl = isConnected
-        ? `https://${escapeHtml(siteUrl)}/${escapeHtml(fileName)}`
-        : null;
+      const fileUrl = isConnected ? `https://${escapeHtml(siteUrl)}/${escapeHtml(fileName)}` : null;
       const clickAttr = fileUrl ? `data-url="${fileUrl}"` : "";
       html += `<div class="file-item ${isActive ? "active" : ""}" ${clickAttr}>
                 <span class="file-dot"></span>
@@ -692,8 +695,7 @@ function devLogEntry(label, value, status = "", entryId = null) {
 function devLogSeparator() {
   const entry = document.createElement("div");
   entry.className = "entry separator";
-  entry.innerHTML =
-    '<hr style="border: none; border-top: 1px solid rgba(0,0,0,0.06); margin: 4px 0;">';
+  entry.innerHTML = '<hr style="border: none; border-top: 1px solid rgba(0,0,0,0.06); margin: 4px 0;">';
   devLog.appendChild(entry);
   devLog.scrollTop = devLog.scrollHeight;
 }
@@ -777,43 +779,30 @@ window.addEventListener("message", (event) => {
       break;
     case "recovered":
       showDefault();
-      showNotification(
-        "Synced. Your edits were not saved, but you can try again.",
-        "error",
-      );
+      showNotification("Synced. Your edits were not saved, but you can try again.", "error");
       break;
     case "recoveryFailed":
       showDefault();
-      showErrorWithReload(
-        msg.userMessage || "Could not sync. Please reload the page.",
-      );
+      showErrorWithReload(msg.userMessage || "Could not sync. Please reload the page.");
       break;
     case "error":
       showEditing();
       if (msg.recoverable) {
         showNotification(msg.userMessage || "Something went wrong", "error");
       } else {
-        showErrorWithReload(
-          msg.userMessage || "Something went wrong. Try reloading the page.",
-        );
+        showErrorWithReload(msg.userMessage || "Something went wrong. Try reloading the page.");
       }
       break;
     case "fileInfo":
       // connected flag: true if repo is reachable and file resolved
-      updateFileList(
-        msg.resolvedFile,
-        msg.editableFiles,
-        msg.siteUrl,
-        msg.connected,
-      );
+      updateFileList(msg.resolvedFile, msg.editableFiles, msg.siteUrl, msg.connected);
       break;
     case "noSiteConfig":
       // No repo configured for this site.
       // Do NOT disable editing - free users can still edit (freemium DOM-only mode).
       siteConnected = false;
       currentSiteUrl = window.location ? window.location.hostname : null;
-      fileList.innerHTML =
-        '<p class="file-list-hint">Connect a GitHub repo in Settings to enable saving.</p>';
+      fileList.innerHTML = '<p class="file-list-hint">Connect a GitHub repo in Settings to enable saving.</p>';
       configPanel.classList.remove("collapsed");
       break;
     case "diffEntry":
@@ -928,12 +917,7 @@ function setLicenseState(membership, licenseKey) {
 
   // Set capability flags from config
   const caps = BLIP_CONFIG.capabilities[tier] || [];
-  const allCaps = [
-    "github-commit",
-    "local-file-edit",
-    "add-site",
-    "unlimited-sites",
-  ];
+  const allCaps = ["github-commit", "local-file-edit", "add-site", "unlimited-sites"];
   for (const cap of allCaps) {
     const attr = "data-can-" + cap;
     if (caps.includes(cap)) {
@@ -945,8 +929,7 @@ function setLicenseState(membership, licenseKey) {
 
   // The few things CSS can't do: set masked key text, disable form inputs
   if (tier !== "free" && licenseKey) {
-    maskedKeyDisplay.textContent =
-      licenseKey.substring(0, 8) + "••••••••••••••••••••";
+    maskedKeyDisplay.textContent = licenseKey.substring(0, 8) + "••••••••••••••••••••";
   }
 
   // Disable form inputs for free users (CSS greys them out, this prevents submission)
@@ -966,9 +949,7 @@ function setLicenseState(membership, licenseKey) {
       const sites = result.blipSites || [];
       if (sites.length >= 1) {
         document.body.removeAttribute("data-can-add-site");
-        const fields = siteForm.querySelectorAll(
-          'input, button[type="submit"]',
-        );
+        const fields = siteForm.querySelectorAll('input, button[type="submit"]');
         fields.forEach((el) => {
           el.disabled = true;
         });

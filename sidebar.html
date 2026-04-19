@@ -15,31 +15,22 @@
         <div id="collapsedView" class="collapsed-view">
             <div id="blipTab" class="blip-tab tab-state-default">
                 <span class="tab-name">blip</span>
-                <span
-                    class="tab-control tab-show-default"
-                    data-action="startEdit"
-                    >edit</span
-                >
+                <span class="tab-control tab-show-default" data-action="startEdit">edit</span>
                 <span class="tab-control tab-show-editing">
-                    <span class="editing-label" data-action="cancel"
-                        >cancel</span
-                    >
-                    <span class="label-save" data-action="save"
-                        >save<span class="tab-dots-slow"></span
-                    ></span>
+                    <span class="editing-label" data-action="cancel">cancel</span>
+                    <span class="label-save" data-action="save">
+                        save
+                        <span class="tab-dots-slow"></span>
+                    </span>
                 </span>
-                <span class="tab-control tab-show-saving"
-                    >saving<span class="tab-dots"></span
-                ></span>
+                <span class="tab-control tab-show-saving">
+                    saving
+                    <span class="tab-dots"></span>
+                </span>
                 <span class="tab-control tab-show-saved">saved!</span>
-                <span class="tab-control tab-show-error" data-action="startEdit"
-                    >error - retry?</span
-                >
-                <span
-                    class="tab-expand"
-                    data-action="expandSidebar"
-                    title="See your edits"
-                    ><span class="material-symbols-outlined">double_arrow</span>
+                <span class="tab-control tab-show-error" data-action="startEdit">error - retry?</span>
+                <span class="tab-expand" data-action="expandSidebar" title="See your edits">
+                    <span class="material-symbols-outlined">double_arrow</span>
                 </span>
             </div>
         </div>
@@ -48,7 +39,8 @@
         <div id="expandedView" class="expanded-view hidden">
             <div class="header">
                 <div class="logo">
-                    blip<span class="url-part">cms.com</span>
+                    blip
+                    <span class="url-part">cms.com</span>
                 </div>
                 <button class="close-btn" id="closeBtn" title="Close sidebar">
                     <svg
@@ -81,31 +73,24 @@
                         </div>
                         <!-- Local file indicator (shown on file:// pages with Pro) -->
                         <div id="localFileInfo" class="local-file-info hidden">
-                            <span
-                                class="material-symbols-outlined local-file-icon"
-                                >folder_open</span
-                            >
-                            <span
-                                >Saving to <strong id="localFileName"></strong
-                            ></span>
+                            <span class="material-symbols-outlined local-file-icon">folder_open</span>
+                            <span>
+                                Saving to
+                                <strong id="localFileName"></strong>
+                            </span>
                         </div>
                         <button class="btn btn-save" id="saveBtn">Save</button>
-                        <button class="btn btn-cancel" id="cancelBtn">
-                            Cancel
-                        </button>
+                        <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
                     </div>
 
                     <!-- Save-to-repo checkbox (shown when site is connected) -->
                     <div id="saveToRepo" class="save-to-repo hidden">
                         <label class="save-to-label">
-                            <input
-                                type="checkbox"
-                                id="saveToCheckbox"
-                                checked
-                            />
-                            <span
-                                >Save to <strong id="saveToSiteName"></strong
-                            ></span>
+                            <input type="checkbox" id="saveToCheckbox" checked />
+                            <span>
+                                Save to
+                                <strong id="saveToSiteName"></strong>
+                            </span>
                         </label>
                     </div>
 
@@ -113,7 +98,8 @@
                     <div id="saveToPrompt" class="save-to-prompt hidden">
                         <p>
                             Want to save your edits directly to
-                            <strong id="promptSiteName"></strong>?
+                            <strong id="promptSiteName"></strong>
+                            ?
                         </p>
                     </div>
                 </div>
@@ -131,13 +117,8 @@
                     <div class="local-grant-prompt">
                         <p class="local-grant-title">Local file detected</p>
                         <p class="local-grant-file" id="localGrantFile"></p>
-                        <p class="local-grant-hint">
-                            Grant folder access to edit and save this file
-                            directly.
-                        </p>
-                        <button class="btn btn-primary" id="grantAccessBtn">
-                            Grant folder access
-                        </button>
+                        <p class="local-grant-hint">Grant folder access to edit and save this file directly.</p>
+                        <button class="btn btn-primary" id="grantAccessBtn">Grant folder access</button>
                     </div>
                 </div>
 
@@ -156,11 +137,9 @@
 
                 <div id="contact-support">
                     Need help?
-                    <a
-                        class="support"
-                        href="/cdn-cgi/l/email-protection#0d7e787d7d627f794d6f61647d6e607e236e6260"
-                        >Contact support</a
-                    >
+                    <a class="support" href="/cdn-cgi/l/email-protection#0d7e787d7d627f794d6f61647d6e607e236e6260">
+                        Contact support
+                    </a>
                 </div>
             </div>
 
@@ -168,11 +147,7 @@
             <div class="config-panel collapsed settings-panel" id="configPanel">
                 <div class="config-header">
                     <span class="config-label">Manage sites</span>
-                    <button
-                        class="config-toggle"
-                        id="configToggle"
-                        title="Collapse/expand"
-                    >
+                    <button class="config-toggle" id="configToggle" title="Collapse/expand">
                         <svg
                             width="14"
                             height="14"
@@ -189,73 +164,42 @@
                 </div>
                 <div class="config-body" id="configBody">
                     <div id="savedSitesList"></div>
-                    <button class="config-add-btn" id="addSiteBtn">
-                        + Add a site
-                    </button>
+                    <button class="config-add-btn" id="addSiteBtn">+ Add a site</button>
                     <div id="addSiteForm" class="hidden">
                         <div class="form-header free">
                             To add a site,
-                            <a
-                                href="https://buy.stripe.com/3cI00kggp42Offk4jqgw00p"
-                                >get Pro</a
-                            >.<br /><br />
-                            To add unlimited sites,
-                            <a
-                                href="https://buy.stripe.com/bJedRaggpczk4AGg28gw00o"
-                                >become a Founding VIP</a
-                            >
+                            <a href="https://buy.stripe.com/3cI00kggp42Offk4jqgw00p">upgrade to Pro</a>
+                            or
+                            <a href="https://buy.stripe.com/6oUcN6fcl1UG2sydU0gw00n">VIP</a>
                         </div>
-                        <div class="form-header founding-member">
-                            To map unlimited additional sites,
-                            <a
-                                href="https://buy.stripe.com/6oUcN6fcl1UG2sydU0gw00n"
-                                >upgrade to VIP</a
-                            >
-                        </div>
+
                         <form class="config-form" id="siteForm">
-                            <input
-                                id="fieldSiteUrl"
-                                type="text"
-                                placeholder="Site URL (e.g. remaphq.com)"
-                                required
-                            />
-                            <input
-                                id="fieldRepo"
-                                type="text"
-                                placeholder="GitHub repo (owner/repo)"
-                                required
-                            />
-                            <input
-                                id="fieldBranch"
-                                type="text"
-                                placeholder="Branch (default: main)"
-                            />
-                            <input
-                                id="fieldToken"
-                                type="password"
-                                placeholder="Personal access token"
-                                required
-                            />
+                            <input id="fieldSiteUrl" type="text" placeholder="Site URL (e.g. remaphq.com)" required />
+                            <input id="fieldRepo" type="text" placeholder="GitHub repo (owner/repo)" required />
+                            <input id="fieldBranch" type="text" placeholder="Branch (default: main)" />
+                            <input id="fieldToken" type="password" placeholder="Personal access token" required />
                             <p class="config-form-hint">
                                 Need a token?
                                 <a
                                     href="https://github.com/settings/tokens/new?scopes=repo&description=Blip"
                                     target="_blank"
-                                    >Generate one on GitHub</a
                                 >
-                                with <code>repo</code> scope.
+                                    Generate one on GitHub
+                                </a>
+                                with
+                                <code>repo</code>
+                                scope.
                             </p>
                             <div class="config-form-actions">
-                                <button type="submit" class="config-btn-save">
-                                    Save site
-                                </button>
-                                <button
-                                    type="button"
-                                    class="config-btn-cancel"
-                                    id="cancelAddSite"
-                                >
-                                    Cancel
-                                </button>
+                                <button type="submit" class="config-btn-save">Save site</button>
+                                <button type="button" class="config-btn-cancel" id="cancelAddSite">Cancel</button>
+                            </div>
+
+                            <div class="form-footer">
+                                <div class="founding-member">
+                                    To map unlimited additional sites,
+                                    <a href="https://buy.stripe.com/6oUcN6fcl1UG2sydU0gw00n">upgrade to VIP</a>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -265,31 +209,21 @@
             <!-- License panel -->
             <div id="licensePanel" class="license-panel settings-panel">
                 <div class="license-panel-header">
-                    <span class="license-panel-label"
-                        >Blip Pro
-                        <span class="license-active-badge tier-free"
-                            ><span class="material-symbols-outlined"
-                                >lock</span
-                            ></span
-                        >
-                        <span class="license-active-badge tier-foundingMember"
-                            ><span class="tier-label"> Founding member</span
-                            ><span class="material-symbols-outlined"
-                                >verified</span
-                            ></span
-                        >
-                        <span class="license-active-badge tier-foundingVIP"
-                            ><span class="tier-label"> Founding VIP</span
-                            ><span class="material-symbols-outlined"
-                                >verified</span
-                            ></span
-                        >
+                    <span class="license-panel-label">
+                        Blip Pro
+                        <span class="license-active-badge tier-free">
+                            <span class="material-symbols-outlined">lock</span>
+                        </span>
+                        <span class="license-active-badge tier-foundingMember">
+                            <span class="tier-label">Founding member</span>
+                            <span class="material-symbols-outlined">verified</span>
+                        </span>
+                        <span class="license-active-badge tier-foundingVIP">
+                            <span class="tier-label">Founding VIP</span>
+                            <span class="material-symbols-outlined">verified</span>
+                        </span>
                     </span>
-                    <button
-                        class="license-toggle"
-                        id="licenseToggle"
-                        title="Collapse/expand"
-                    >
+                    <button class="license-toggle" id="licenseToggle" title="Collapse/expand">
                         <svg
                             width="14"
                             height="14"
@@ -308,115 +242,70 @@
                     <!-- Unlicensed state - Freemium -->
                     <div id="unlicensedState" class="license-state tier-free">
                         <p class="explaination">
-                            Connect repos, save edits <b>live</b>
+                            Connect repos, save edits
+                            <b>live</b>
                         </p>
                         <div class="license-activate-row">
-                            <input
-                                id="licenseKeyInput"
-                                type="text"
-                                placeholder="Enter license key.."
-                            />
-                            <button id="activateBtn" class="btn btn-secondary">
-                                Activate Pro
-                            </button>
+                            <input id="licenseKeyInput" type="text" placeholder="Enter license key.." />
+                            <button id="activateBtn" class="btn btn-secondary">Activate Pro</button>
                         </div>
                         <p id="activateError" class="license-error hidden">
                             Invalid key. Please try again -
-                            <a class="support" href="mailto:support@blipcms.com"
-                                >need help?</a
-                            >
+                            <a class="support" href="mailto:support@blipcms.com">need help?</a>
                         </p>
 
                         <a
                             href="https://buy.stripe.com/3cI00kggp42Offk4jqgw00p"
                             target="_blank"
                             class="license-buy-btn"
-                            onclick="
-                                window.collapseSidebar &&
-                                    window.collapseSidebar()
-                            "
-                            >Upgrade to Pro</a
+                            onclick="window.collapseSidebar && window.collapseSidebar()"
                         >
+                            Upgrade to Pro
+                        </a>
                         <div class="license-upgrade-info">
-                            Limited offer: <b>$9</b> lifetime deal
+                            Limited offer:
+                            <b>$9</b>
+                            lifetime deal
                         </div>
                     </div>
 
                     <!-- Founding Member state (key shown, upgrade CTA) -->
-                    <div
-                        id="memberState"
-                        class="license-state tier-foundingMember"
-                    >
+                    <div id="memberState" class="license-state tier-foundingMember">
                         <div class="license-key-display">
                             <span class="license-key-label">Your key:</span>
-                            <span
-                                id="maskedKeyDisplay"
-                                class="license-key-masked"
-                            ></span>
-                            <span
-                                id="editKeyBtn"
-                                class="material-symbols-outlined edit-key-icon"
-                                title="Change key"
-                                >edit</span
-                            >
+                            <span id="maskedKeyDisplay" class="license-key-masked"></span>
+                            <span id="editKeyBtn" class="material-symbols-outlined edit-key-icon" title="Change key">
+                                edit
+                            </span>
                         </div>
-                        <div
-                            id="editKeyForm"
-                            class="license-activate-row hidden"
-                        >
-                            <input
-                                id="editKeyInput"
-                                type="text"
-                                placeholder="Enter new key.."
-                            />
-                            <button
-                                id="editKeyActivateBtn"
-                                class="btn btn-secondary"
-                            >
-                                Activate
-                            </button>
+                        <div id="editKeyForm" class="license-activate-row hidden">
+                            <input id="editKeyInput" type="text" placeholder="Enter new key.." />
+                            <button id="editKeyActivateBtn" class="btn btn-secondary">Activate</button>
                             <button
                                 id="editKeyCancelBtn"
                                 class="btn btn-cancel"
-                                style="
-                                    width: auto;
-                                    padding: 8px 12px;
-                                    font-size: 11px;
-                                "
+                                style="width: auto; padding: 8px 12px; font-size: 11px"
                             >
                                 Cancel
                             </button>
                         </div>
                         <div id="vipForm" class="license-activate-row hidden">
-                            <input
-                                id="upgradeKeyInput"
-                                type="text"
-                                placeholder="Enter VIP key.."
-                            />
-                            <button id="upgradeBtn" class="btn btn-secondary">
-                                Activate VIP
-                            </button>
+                            <input id="upgradeKeyInput" type="text" placeholder="Enter VIP key.." />
+                            <button id="upgradeBtn" class="btn btn-secondary">Activate VIP</button>
                         </div>
                         <a
                             href="https://buy.stripe.com/6oUcN6fcl1UG2sydU0gw00n"
                             target="_blank"
                             class="license-buy-btn"
-                            onclick="
-                                window.collapseSidebar &&
-                                    window.collapseSidebar()
-                            "
-                            >Upgrade to VIP</a
+                            onclick="window.collapseSidebar && window.collapseSidebar()"
                         >
-                        <div class="license-upgrade-info">
-                            (unlimited sites)
-                        </div>
+                            Upgrade to VIP
+                        </a>
+                        <div class="license-upgrade-info">(unlimited sites)</div>
                     </div>
 
                     <!-- Founding VIP state (collapsed, just the badge) -->
-                    <div
-                        id="vipState"
-                        class="license-state tier-foundingVIP"
-                    ></div>
+                    <div id="vipState" class="license-state tier-foundingVIP"></div>
                 </div>
             </div>
 
@@ -426,11 +315,7 @@
             <div class="dev-panel collapsed" id="devPanel">
                 <div class="dev-header">
                     <span class="dev-label">Dev</span>
-                    <button
-                        class="dev-toggle"
-                        id="devToggle"
-                        title="Collapse/expand"
-                    >
+                    <button class="dev-toggle" id="devToggle" title="Collapse/expand">
                         <svg
                             width="12"
                             height="12"

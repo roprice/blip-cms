@@ -1560,16 +1560,29 @@ body:not([data-can-add-site]) .config-form button[type="submit"] {
     pointer-events: none;
 }
 
-.form-header {
+.form-header,
+.form-footer {
     display: none;
     text-align: center;
     color: var(--text-muted);
 }
+.form-header a,
+.form-footer a {
+    color: var(--accent);
+}
+.form-header a:hover,
+.form-footer a:hover {
+    color: var(--accent-hover);
+}
 
+body[data-tier="ffoundingMemberree"] .form-header.free {
+    display: none;
+}
 body[data-tier="free"] .form-header.free {
     display: block;
 }
-body[data-tier="foundingMember"] .form-header.founding-member {
+
+body[data-tier="foundingMember"] .form-footer {
     display: block;
 }
 
@@ -1579,6 +1592,10 @@ body[data-tier="free"] .config-empty {
 
 body[data-tier="free"] .dev-panel {
     display: none;
+}
+
+.form-footer .founding-member {
+    margin-top: 20px;
 }
 
 body:not([data-can-add-site]) .config-form-hint {
