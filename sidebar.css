@@ -1284,6 +1284,11 @@ button#activateBtn:hover {
     padding: 2px 0 6px;
 }
 
+/* Hide empty-state message when sites exist */
+body:not([data-site-count="0"]) .config-empty {
+    display: none;
+}
+
 .config-add-btn {
     width: 100%;
     padding: 7px 12px;
@@ -1586,8 +1591,18 @@ body[data-tier="foundingMember"] .form-footer {
     display: block;
 }
 
+/* Hide the VIP upsell text until they've used their one site */
+body[data-tier="foundingMember"] .form-footer .founding-member {
+    display: none;
+}
+
 body[data-tier="free"] .config-empty {
     display: none;
+}
+
+/* Show founding-member VIP upsell only when they have ≥1 site */
+body[data-tier="foundingMember"]:not([data-site-count="0"]) .founding-member {
+    display: block;
 }
 
 body[data-tier="free"] .dev-panel {

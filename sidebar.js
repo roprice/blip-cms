@@ -425,8 +425,10 @@ async function renderSavedSites(sites) {
     sites = result.blipSites || [];
   }
 
+  document.body.setAttribute("data-site-count", sites.length);
+
   if (sites.length === 0) {
-    savedSitesList.innerHTML = '<p class="config-empty">No sites configured yet.</p>';
+    savedSitesList.innerHTML = "";
     return;
   }
 
