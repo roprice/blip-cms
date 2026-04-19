@@ -195,7 +195,9 @@ function handleSidebarMessage(event) {
       handleActivateKey(msg.key);
       break;
     case "navigateTo":
-      window.location.href = msg.url;
+      if (msg.url && msg.url.startsWith("http")) {
+        window.location.href = msg.url;
+      }
       break;
   }
 }

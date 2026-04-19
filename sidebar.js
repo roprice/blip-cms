@@ -706,6 +706,8 @@ function devLogSeparator() {
 // Message handler: receive from content script
 // -------------------------------------------------------
 window.addEventListener("message", (event) => {
+  // Only accept messages from the parent frame (content script)
+  if (event.source !== window.parent) return;
   const msg = event.data;
   if (msg.source !== "blip-content") return;
 
