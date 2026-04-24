@@ -5,10 +5,8 @@ const BLIP_CONFIG = {
   // File resolution
   // File resolution
   files: {
-    editableExtensions: ['.html', '.htm', '.shtml', '.md', '.txt'],
-    localEditableExtensions: ['.html', '.htm', '.shtml', '.md', '.txt'],
-    devExtensions: ['.php', '.asp', '.aspx', '.rss', '.txt', '.css', '.js', '.json', '.xml', '.svg', '.py', '.ts', '.tsx', '.jsx'],
-    excludePatterns: ['template', '.git', '.vscode', '.github', '.blip', '.claude', '.gemini', '.agent', '.antigravity', '.codex', '.copilot', '.cursor', '.ref', 'node_modules', 'dist']
+    editableExtensions: ['.html', '.htm', '.shtml', '.md', '.txt','.css', '.xml', '.json'],
+    excludePatterns: ['.git', '.vscode', '.github', '.blip', '.claude', '.gemini', '.agent', '.antigravity', '.codex', '.copilot', '.cursor', '.ref', 'node_modules', 'dist']
   },
 
   // Sidebar settings
