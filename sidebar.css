@@ -810,6 +810,8 @@ span.tier-label {
     flex-direction: column;
     gap: 0;
     padding-top: 4px;
+    background: var(--surface);
+        border-radius: 4px;
 }
 
 /* Collapsible site groups */

@@ -170,82 +170,109 @@ editsWrapper.addEventListener("click", (e) => {
 
   const container = section.querySelector(".edits-site-container");
 
-  // Copy action: build structured plain-text from diff entries
-  if (action.classList.contains("copy-action")) {
-    const siteKey = section.dataset.site;
-    const entries = container.querySelectorAll(".diff-entry");
-    if (!entries.length) return;
+  // Copy action: build structured markdown from diff entries
+    if (action.classList.contains("copy-action")) {
+      const siteKey = section.dataset.site;
+      const entries = container.querySelectorAll(".diff-entry");
+      if (!entries.length) return;
 
-    // Extract changed phrases (group consecutive marks into single strings)
-    function extractPhrases(el) {
-      const phrases = [];
-      let current = [];
-      for (const node of el.childNodes) {
-        if (node.nodeName === "MARK") {
-          current.push(node.textContent);
-        } else {
-          if (current.length && node.textContent.trim() === "") {
+      // Extract changed phrases (group consecutive marks into single strings)
+      function extractPhrases(el) {
+        const phrases = [];
+        let current = [];
+        for (const node of el.childNodes) {
+          if (node.nodeName === "MARK") {
             current.push(node.textContent);
-          } else if (current.length) {
-            const phrase = current.join("").trim();
-            if (phrase) phrases.push(phrase);
-            current = [];
+          } else {
+            if (current.length && node.textContent.trim() === "") {
+              current.push(node.textContent);
+            } else if (current.length) {
+              const phrase = current.join("").trim();
+              if (phrase) phrases.push(phrase);
+              current = [];
+            }
           }
         }
+        if (current.length) {
+          const phrase = current.join("").trim();
+          if (phrase) phrases.push(phrase);
+        }
+        return phrases;
       }
-      if (current.length) {
-        const phrase = current.join("").trim();
-        if (phrase) phrases.push(phrase);
-      }
-      return phrases;
+
+      const stripTags = (s) => s.replace(/<[^>]*>/g, "");
+
+      const lines = [];
+      let editNum = 0;
+
+      entries.forEach((entry) => {
+        editNum++;
+
+        const filename = entry.querySelector(".diff-filename");
+        const timestamp = entry.querySelector(".diff-timestamp");
+        const befores = entry.querySelectorAll(".diff-before");
+        const afters = entry.querySelectorAll(".diff-after");
+
+        const path = filename ? filename.textContent.trim() : "/";
+        const fullUrl = "https://" + siteKey + path;
+
+        // Build summary from marked phrases
+        const removed = [];
+        const added = [];
+        befores.forEach((b) => removed.push(...extractPhrases(b)));
+        afters.forEach((a) => added.push(...extractPhrases(a)));
+
+        // Header
+        lines.push(`# Edit ${editNum} - ${fullUrl}`);
+        lines.push("");
+
+        // Summary line
+        if (removed.length || added.length) {
+          const parts = [];
+          if (removed.length) parts.push('Removed "' + removed.map(stripTags).join('", "') + '"');
+          if (added.length) parts.push('added "' + added.map(stripTags).join('", "') + '"');
+          lines.push(parts.join(", "));
+          lines.push("");
+        }
+
+        // Before/after code blocks (before first, then after)
+        for (let i = 0; i < Math.max(befores.length, afters.length); i++) {
+          if (befores[i]) {
+            lines.push("Before:");
+            lines.push("`" + befores[i].textContent.trim() + "`");
+            lines.push("");
+          }
+          if (afters[i]) {
+            lines.push("After:");
+            lines.push("`" + afters[i].textContent.trim() + "`");
+            lines.push("");
+          }
+        }
+
+        // Timestamp as italic metadata
+        const ts = timestamp ? timestamp.textContent.trim() : "";
+        if (ts) {
+          lines.push("_" + ts + "_");
+          lines.push("");
+        }
+
+        lines.push("");
+      });
+
+      // Single trailing credit
+      lines.push("---");
+      lines.push("_Edited with [Blip](https://blipcms.com)_");
+
+      const text = lines.join("\n");
+      navigator.clipboard.writeText(text).then(() => {
+        action.textContent = "check";
+        action.classList.add("copied");
+        setTimeout(() => {
+          action.textContent = "content_copy";
+          action.classList.remove("copied");
+        }, 1500);
+      });
     }
-
-    const stripTags = (s) => s.replace(/<[^>]*>/g, "");
-
-    const lines = [];
-    entries.forEach((entry) => {
-      const filename = entry.querySelector(".diff-filename");
-      const timestamp = entry.querySelector(".diff-timestamp");
-      const befores = entry.querySelectorAll(".diff-before");
-      const afters = entry.querySelectorAll(".diff-after");
-
-      const path = filename ? filename.textContent.trim() : "/";
-      const fullUrl = "https://" + siteKey + path;
-
-      const removed = [];
-      const added = [];
-      befores.forEach((b) => removed.push(...extractPhrases(b)));
-      afters.forEach((a) => added.push(...extractPhrases(a)));
-
-      let summary = fullUrl;
-      if (removed.length || added.length) {
-        const parts = [];
-        if (removed.length) parts.push('removed "' + removed.map(stripTags).join('", "') + '"');
-        if (added.length) parts.push('added "' + added.map(stripTags).join('", "') + '"');
-        summary += " - " + parts.join(", ");
-      }
-      lines.push(summary);
-
-      for (let i = 0; i < Math.max(afters.length, befores.length); i++) {
-        if (afters[i]) lines.push("after edit:\n" + afters[i].textContent);
-        if (befores[i]) lines.push("before edit:\n" + befores[i].textContent);
-      }
-
-      const ts = timestamp ? timestamp.textContent.trim() : "";
-      lines.push("[edited " + ts + ", with Blip https://blipcms.com]");
-      lines.push("");
-    });
-
-    const text = lines.join("\n");
-    navigator.clipboard.writeText(text).then(() => {
-      action.textContent = "check";
-      action.classList.add("copied");
-      setTimeout(() => {
-        action.textContent = "content_copy";
-        action.classList.remove("copied");
-      }, 1500);
-    });
-  }
 
   // Clear action
   if (action.classList.contains("clear-action")) {
