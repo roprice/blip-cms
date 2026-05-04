@@ -199,6 +199,21 @@ function handleSidebarMessage(event) {
         window.location.href = msg.url;
       }
       break;
+    case 'copyToClipboard':
+      navigator.clipboard.writeText(msg.text).then(() => {
+          sendToSidebar('clipboardDone');
+      }).catch(() => {
+          const ta = document.createElement('textarea');
+          ta.value = msg.text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          sendToSidebar('clipboardDone');
+      });
+      break;
   }
 }
 

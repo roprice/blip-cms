@@ -264,14 +264,13 @@ editsWrapper.addEventListener("click", (e) => {
       lines.push("_Edited with [Blip](https://blipcms.com)_");
 
       const text = lines.join("\n");
-      navigator.clipboard.writeText(text).then(() => {
-        action.textContent = "check";
-        action.classList.add("copied");
-        setTimeout(() => {
-          action.textContent = "content_copy";
-          action.classList.remove("copied");
-        }, 1500);
-      });
+            sendToContent('copyToClipboard', { text });
+            action.textContent = "check";
+            action.classList.add("copied");
+            setTimeout(() => {
+              action.textContent = "content_copy";
+              action.classList.remove("copied");
+            }, 1500);
     }
 
   // Clear action

@@ -819,6 +819,10 @@ span.tier-label {
     margin-bottom: 16px;
 }
 
+.file-website.connected {
+    padding-top: 12px;
+}
+
 .file-site-header {
     display: flex;
     align-items: center;
