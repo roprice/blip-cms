@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Blip",
-  "version": "0.1.0",
-  "description": "True edit-in-place for flat-file websites. Edit your live site, commit to GitHub.",
+  "version": "1.0.1",
+  "description": "Blip turns your web browser into an 'edit-in-place' web page editor and mini-CMS.",
   "permissions": ["storage", "activeTab", "scripting"],
   "action": {
     "default_title": "Toggle Blip"

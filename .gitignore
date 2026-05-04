@@ -6,3 +6,6 @@
 .claudeignore
 
 SPECS.md
+.SPECS.md
+
+*.zip
