@@ -1,0 +1,1 @@
+Blip is an extension for Chromium browsers that builds some tools on top of the designMode toggle that effectively turn the browser into a convenient website editor. Using GitHub as a backend it can be used to make live edits. Apache License 2.0
